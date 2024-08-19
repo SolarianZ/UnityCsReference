@@ -23,6 +23,7 @@ using PreviewMaterialType = UnityEditor.EditorGUIUtility.PreviewType;
 using System.Linq;
 using System.Reflection;
 using Unity.Profiling;
+using UnityEditor.Rendering;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
@@ -5639,7 +5640,7 @@ namespace UnityEditor
                         ColorPicker.Show(GUIView.current, value, showAlpha, hdr);
                         GUIUtility.ExitGUI();
                     }
-                    else if (evt.modifiers == EventModifiers.Control)
+                    else if (evt.modifiers == EventModifiers.Control && GUIUtility.keyboardControl == id)
                     {
                         if (evt.keyCode == KeyCode.C)
                         {
@@ -6482,7 +6483,7 @@ namespace UnityEditor
                     // in the Inspector has different values. Don't show it when expanded, since the difference will be visible further down.
                     if (showMixedValue && !foldout)
                     {
-                        style.Draw(drawRect, content, id, false);
+                        style.Draw(drawRect, content, id, false, false);
 
                         BeginHandleMixedValueContentColor();
                         Rect fieldPosition = origPosition;
@@ -6492,7 +6493,7 @@ namespace UnityEditor
                     }
                     else
                     {
-                        style.Draw(drawRect, content, id, foldout);
+                        style.Draw(drawRect, content, id, foldout, false);
                     }
                     break;
                 case EventType.KeyDown:

@@ -9,7 +9,6 @@ using System.Linq;
 using UnityEditor.Profiling;
 using UnityEditor.SearchService;
 using UnityEditor.ShortcutManagement;
-using UnityEditor.Utils;
 using UnityEngine;
 using UnityEngine.Search;
 using UnityEngine.UIElements;
@@ -37,6 +36,11 @@ namespace UnityEditor.Search
         internal const float defaultWidth = 700f;
         internal const float defaultHeight = 450f;
 
+        internal const string refreshShortcutId = "Search/Refresh";
+        internal const string toggleQueryBuilderModeShortcutId = "Search/Toggle Query Builder Mode";
+        internal const string toggleInspectorPanelShortcutId = "Search/Toggle Inspector Panel";
+        internal const string toggleSavedSearchesPanelShortcutId = "Search/Toggle Saved Searches Panel";
+
         private const string k_TogleSyncShortcutName = "Search/Toggle Sync Search View";
         private const string k_LastSearchPrefKey = "last_search";
         private const string k_SideBarWidthKey = "Search.SidebarWidth";
@@ -61,6 +65,7 @@ namespace UnityEditor.Search
         private VisualElement m_SearchQueryPanelContainer;
         private VisualElement m_DetailsPanelContainer;
         private List<SearchProvider> m_AvailableProviders;
+        Dictionary<string, (ShortcutBinding, Action)> m_ShortcutBindings;
 
         [SerializeField] protected int m_ContextHash;
         [SerializeField] private float m_PreviousItemSize = -1;
@@ -115,6 +120,7 @@ namespace UnityEditor.Search
         {
             VisualElement body = rootVisualElement;
 
+            body.focusable = true;
             body.style.flexGrow = 1.0f;
             body.RegisterCallback<KeyDownEvent>(OnGlobalKeyDownEvent, invokePolicy: InvokePolicy.IncludeDisabled, useTrickleDown: TrickleDown.TrickleDown);
 
@@ -138,6 +144,11 @@ namespace UnityEditor.Search
         internal bool IsGeneralSearchWindow()
         {
             return context.options.HasFlag(SearchFlags.GeneralSearchWindow);
+        }
+
+        internal static SearchFlags GetAdditionalGeneralSearchWindowFlags()
+        {
+            return SearchFlags.AllProvidersAvailable | SearchFlags.UseSessionSettings;
         }
 
         internal bool HasSessionSettings()
@@ -194,6 +205,10 @@ namespace UnityEditor.Search
             if (evt.keyCode == KeyCode.None && (evt.character == '\t' || (int)evt.character == 10))
                 return true;
 
+            // Handle shortcuts because the textfield is eating them.
+            if (HandleShortcuts(evt))
+                return true;
+
             if (SearchGlobalEventHandlerManager.HandleGlobalEventHandlers(m_ViewState.globalEventManager, evt))
                 return true;
 
@@ -202,30 +217,9 @@ namespace UnityEditor.Search
 
             if (evt is KeyDownEvent && !GUIUtility.textFieldInput)
             {
-                var ctrl = evt.ctrlKey || evt.commandKey;
                 if (evt.keyCode == KeyCode.Escape)
                 {
                     HandleEscapeKeyDown(evt);
-                    return true;
-                }
-                else if (evt.keyCode == KeyCode.F5)
-                {
-                    Refresh();
-                    return true;
-                }
-                else if (evt.keyCode == KeyCode.F1)
-                {
-                    ToggleQueryBuilder();
-                    return true;
-                }
-                else if (evt.keyCode == KeyCode.F4 && viewState.flags.HasNone(SearchViewFlags.DisableInspectorPreview))
-                {
-                    TogglePanelView(SearchViewFlags.OpenInspectorPreview);
-                    return true;
-                }
-                else if (evt.keyCode == KeyCode.F3 && IsSavedSearchQueryEnabled())
-                {
-                    TogglePanelView(SearchViewFlags.OpenLeftSidePanel);
                     return true;
                 }
                 else if (evt.modifiers.HasAny(EventModifiers.Alt) && evt.keyCode == KeyCode.LeftArrow)
@@ -369,6 +363,12 @@ namespace UnityEditor.Search
                     Dispatcher.Emit(SearchEvent.SearchContextChanged, new SearchEventPayload(this));
             }
 
+            if (IsGeneralSearchWindow())
+            {
+                context.options |= GetAdditionalGeneralSearchWindowFlags();
+            }
+
+            UpdateAvailableProviders();
             m_SearchView?.Reset();
             ComputeContextHash();
             context.searchView = this;
@@ -417,7 +417,8 @@ namespace UnityEditor.Search
             if (!viewState.hideTabs && !string.IsNullOrEmpty(viewState.group))
                 SelectGroup(viewState.group);
 
-            activeQuery = query;
+            if (!query.IsTemporaryQuery())
+                activeQuery = query;
             SearchQueryAsset.AddToRecentSearch(query);
 
             var evt = CreateEvent(SearchAnalytics.GenericEventType.QuickSearchSavedSearchesExecuted, query.searchText, "", query is SearchQueryAsset ? "project" : "user");
@@ -477,6 +478,7 @@ namespace UnityEditor.Search
             using (new EditorPerformanceTracker("SearchView.OnEnable"))
             {
                 minSize = new Vector2(200f, minSize.y);
+                InitializeShortcutBindings();
 
                 rootVisualElement.name = nameof(SearchWindow);
                 rootVisualElement.AddToClassList("search-window");
@@ -507,12 +509,15 @@ namespace UnityEditor.Search
                     Dispatcher.On(SearchEvent.RefreshContent, RefreshContent)
                 };
 
-                var contextProviders = context.GetProviders();
-                m_AvailableProviders = SearchUtils.SortProvider(IsGeneralSearchWindow()
-                    ? contextProviders.Concat(SearchService.Providers).Distinct()
-                    : contextProviders).ToList();
                 s_GlobalViewState = null;
             }
+        }
+
+        void UpdateAvailableProviders()
+        {
+            var contextProviders = context.GetProviders();
+            var availableProviders = context.options.HasAny(SearchFlags.AllProvidersAvailable) ? contextProviders.Concat(SearchService.Providers).Distinct() : contextProviders;
+            m_AvailableProviders = SearchUtils.SortProvider(availableProviders).ToList();
         }
 
         void HandleSaveActiveSearchQuery(ISearchEvent evt)
@@ -547,6 +552,7 @@ namespace UnityEditor.Search
 
         internal virtual void OnDisable()
         {
+            ClearShortcutBindings();
             s_FocusedWindow = null;
 
             m_DebounceOff?.Invoke();
@@ -626,7 +632,7 @@ namespace UnityEditor.Search
         {
             var toggledEnabled = !context.IsEnabled(providerId);
             var provider = SearchService.GetProvider(providerId);
-            if (provider != null && HasSessionSettings())
+            if (provider != null)
             {
                 SearchService.SetActive(providerId, toggledEnabled);
                 SearchSettings.Save();
@@ -684,6 +690,9 @@ namespace UnityEditor.Search
             }
             else
             {
+                if (rootVisualElement.panel.focusController.focusedElement is VisualElement ve && m_SearchQueryPanelContainer.Contains(ve))
+                    rootVisualElement.Focus();
+
                 m_SearchQueryPanelContainer.Clear();
                 m_LeftSplitter?.CollapseChild(0);
             }
@@ -696,6 +705,9 @@ namespace UnityEditor.Search
             }
             else
             {
+                if (rootVisualElement.panel.focusController.focusedElement is VisualElement ve && m_DetailsPanelContainer.Contains(ve))
+                    rootVisualElement.Focus();
+
                 m_DetailsPanelContainer.Clear();
                 m_RightSplitter?.CollapseChild(1);
             }
@@ -1044,6 +1056,10 @@ namespace UnityEditor.Search
             {
                 m_ContextHash = generalWindowContextHash;
             }
+            else if (context.options.HasFlag(SearchFlags.UseSessionSettings) && !string.IsNullOrEmpty(viewState.sessionName))
+            {
+                m_ContextHash = viewState.sessionName.GetHashCode();
+            }
             else
             {
                 m_ContextHash = 0;
@@ -1170,7 +1186,7 @@ namespace UnityEditor.Search
 
         public static SearchWindow Create<T>(SearchContext context, string topic = "Unity", SearchFlags flags = SearchFlags.OpenDefault) where T : SearchWindow
         {
-            context = context ?? SearchService.CreateContext("", SearchFlags.GeneralSearchWindow);
+            context = context ?? SearchService.CreateContext("", flags);
             context.options |= flags;
             var viewState = new SearchViewState(context) { title = topic };
             return Create<T>(viewState.LoadDefaults());
@@ -1297,6 +1313,16 @@ namespace UnityEditor.Search
             SearchUtils.OpenNewWindow();
         }
 
+        [CommandHandler("OpenQuickSearchInContext")]
+        internal static void OpenFromContextWindowCommand(CommandExecuteContext c)
+        {
+            // Called by the Jump Button in Hierarchy and Project Browser
+            var query = c.GetArgument<string>(0);
+            var sourceContext = c.GetArgument<string>(1);
+            SearchUtils.OpenFromContextWindow(query, sourceContext);
+            c.result = true;
+        }
+
         [Shortcut("Help/Search Transient Window")]
         public static void OpenPopupWindow()
         {
@@ -1304,21 +1330,124 @@ namespace UnityEditor.Search
                 SearchAnalytics.SendEvent(window.windowId, SearchAnalytics.GenericEventType.QuickSearchOpen, "PopupWindow");
         }
 
-        [CommandHandler("OpenQuickSearchInContext")]
-        internal static void OpenFromContextWindowCommand(CommandExecuteContext c)
-        {
-            // Called by the Jump Button in Hierarchy and Project Browser
-            var query = c.GetArgument<string>(0);
-            var sourceContext = c.GetArgument<string>(1);
-            var ignoreRestoreContext = c.GetArgument(2, false);
-            SearchUtils.OpenFromContextWindow(query, sourceContext, ignoreRestoreContext, true);
-            c.result = true;
-        }
-
         [Shortcut("Help/Search Contextual")]
         internal static void OpenFromContextWindow(ShortcutArguments args)
         {
             SearchUtils.OpenFromContextWindow();
+        }
+
+        [Shortcut(refreshShortcutId, typeof(SearchWindow), KeyCode.F5)]
+        static void OnRefreshShortcut(ShortcutArguments args)
+        {
+            if (args.context is not SearchWindow sw)
+                return;
+            sw.OnRefresh();
+        }
+
+        void OnRefresh()
+        {
+            Refresh();
+        }
+
+        [Shortcut(toggleQueryBuilderModeShortcutId, typeof(SearchWindow), KeyCode.F1)]
+        static void OnToggleQueryBuilderShortcut(ShortcutArguments args)
+        {
+            if (args.context is not SearchWindow sw)
+                return;
+            sw.OnToggleQueryBuilder();
+        }
+
+        void OnToggleQueryBuilder()
+        {
+            ToggleQueryBuilder();
+        }
+
+        [Shortcut(toggleInspectorPanelShortcutId, typeof(SearchWindow), KeyCode.F4)]
+        static void OnToggleInspectorPanelShortcut(ShortcutArguments args)
+        {
+            if (args.context is not SearchWindow sw)
+                return;
+            sw.OnToggleInspectorPanel();
+        }
+
+        void OnToggleInspectorPanel()
+        {
+            if (viewState.flags.HasAny(SearchViewFlags.DisableInspectorPreview))
+                return;
+            TogglePanelView(SearchViewFlags.OpenInspectorPreview);
+        }
+
+        [Shortcut(toggleSavedSearchesPanelShortcutId, typeof(SearchWindow), KeyCode.F3)]
+        static void OnToggleSavedSearchPanelShortcut(ShortcutArguments args)
+        {
+            if (args.context is not SearchWindow sw)
+                return;
+            sw.OnToggleSavedSearchPanel();
+        }
+
+        void OnToggleSavedSearchPanel()
+        {
+            if (!IsSavedSearchQueryEnabled())
+                return;
+            TogglePanelView(SearchViewFlags.OpenLeftSidePanel);
+        }
+
+        void InitializeShortcutBindings()
+        {
+            // Ideally we should not have to do this, but the text field seems to eat all
+            // shortcuts so we have to handle them ourselves the old fashioned way, i.e.
+            // through our HandleKeyboardNavigation method.
+            m_ShortcutBindings = new Dictionary<string, (ShortcutBinding, Action)>()
+            {
+                {refreshShortcutId, (Utils.GetShortcutBinding(refreshShortcutId), OnRefresh)},
+                {toggleQueryBuilderModeShortcutId, (Utils.GetShortcutBinding(toggleQueryBuilderModeShortcutId), OnToggleQueryBuilder)},
+                {toggleInspectorPanelShortcutId, (Utils.GetShortcutBinding(toggleInspectorPanelShortcutId), OnToggleInspectorPanel)},
+                {toggleSavedSearchesPanelShortcutId, (Utils.GetShortcutBinding(toggleSavedSearchesPanelShortcutId), OnToggleSavedSearchPanel)}
+            };
+            ShortcutManager.instance.shortcutBindingChanged += OnShortcutBindingChanged;
+        }
+
+        void ClearShortcutBindings()
+        {
+            ShortcutManager.instance.shortcutBindingChanged -= OnShortcutBindingChanged;
+            m_ShortcutBindings.Clear();
+        }
+
+        void OnShortcutBindingChanged(ShortcutBindingChangedEventArgs args)
+        {
+            if (m_ShortcutBindings.TryGetValue(args.shortcutId, out var tuple))
+            {
+                (ShortcutBinding _, Action action) = tuple;
+                m_ShortcutBindings[args.shortcutId] = (args.newBinding, action);
+            }
+        }
+
+        internal ShortcutBinding GetShortcutBinding(string shortcutId)
+        {
+            if (m_ShortcutBindings.TryGetValue(shortcutId, out var tuple))
+            {
+                (ShortcutBinding shortcutBinding, Action _) = tuple;
+                return shortcutBinding;
+            }
+
+            return ShortcutBinding.empty;
+        }
+
+        bool HandleShortcuts(KeyDownEvent evt)
+        {
+            var evtKeyCombination = KeyCombination.FromKeyboardInput(evt.keyCode, evt.modifiers);
+            foreach (var (_, (shortcutBinding, action)) in m_ShortcutBindings)
+            {
+                foreach (var keyCombination in shortcutBinding.keyCombinationSequence)
+                {
+                    if (keyCombination.Equals(evtKeyCombination))
+                    {
+                        action?.Invoke();
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         internal void ForceTrackSelection()

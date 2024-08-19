@@ -5,10 +5,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEditorInternal;
+using System.Reflection;
 using UnityEngine;
 using static UnityEditor.MaskDropDownUtils;
-using System.Reflection;
+using Object = UnityEngine.Object;
 
 namespace UnityEditor
 {
@@ -18,13 +18,18 @@ namespace UnityEditor
 
         SerializedProperty m_SerializedProperty;
 
+        // Keep a reference to the targets so we can recreate the serialized property if it becomes invalid. (UUM-72761)
+        Object[] m_Targets;
+        string m_PropertyName;
+
         SelectionModes[] m_SelectionMatch;
         string[] m_OptionNames;
-        int[] m_flagValues;
+        int[] m_FlagValues;
         int[] m_OptionMaskValues;
         int[] m_SelectionMaskValues;
 
         int m_AllLayersMask = 0;
+        bool m_AutoSelectEverything = true;
 
         bool m_SingleSelection = false;
         EditorUtility.SelectMenuItemFunction m_MaskChangeCallback;
@@ -33,6 +38,8 @@ namespace UnityEditor
         public MaskFieldDropDown(SerializedProperty property)
         {
             m_SerializedProperty = property;
+            m_Targets = property.serializedObject.targetObjects;
+            m_PropertyName = property.propertyPath;
             m_SingleSelection = false;
         }
 
@@ -41,7 +48,7 @@ namespace UnityEditor
         {
         }
 
-        public MaskFieldDropDown(string[] optionNames, int[] flagValues, int[] optionMaskValues, int mask, EditorUtility.SelectMenuItemFunction maskChangeCallback)
+        public MaskFieldDropDown(string[] optionNames, int[] flagValues, int[] optionMaskValues, int mask, EditorUtility.SelectMenuItemFunction maskChangeCallback, bool autoSelectEverything = true)
         {
             // these are not flag values, i.e. 1, 2, 4...
             // but the mask & flagValue[0..n] for each possible flag value
@@ -49,14 +56,14 @@ namespace UnityEditor
             m_OptionMaskValues = (int[])optionMaskValues.Clone();
             m_OptionNames = (string[])optionNames.Clone();
 
-            m_flagValues = new int[optionNames.Length];
-            m_flagValues[0] = 0;
-            m_flagValues[1] = -1;
+            m_FlagValues = new int[optionNames.Length];
+            m_FlagValues[0] = 0;
+            m_FlagValues[1] = -1;
 
             if (flagValues == null)
             {
-                for (int i = 2; i < m_flagValues.Length; ++i)
-                    m_flagValues[i] = (1 << i);
+                for (int i = 2; i < m_FlagValues.Length; ++i)
+                    m_FlagValues[i] = (1 << i);
             }
             else
             {
@@ -72,7 +79,7 @@ namespace UnityEditor
                 if (flagValues[flagValues.Length - 1] == ~0)
                     length--;
 
-                Array.Copy(flagValues, index, m_flagValues, 2, length);
+                Array.Copy(flagValues, index, m_FlagValues, 2, length);
             }
 
             m_SelectionMatch = new SelectionModes[] { SelectionModes.All };
@@ -85,6 +92,7 @@ namespace UnityEditor
             foreach (var val in optionMaskValues)
                 if (val != -1 && val != int.MaxValue)
                     m_AllLayersMask |= val;
+            m_AutoSelectEverything = autoSelectEverything;
         }
 
         public void UpdateMaskValues(int mask, int[] optionMaskValues)
@@ -95,7 +103,7 @@ namespace UnityEditor
 
         public override Vector2 GetWindowSize()
         {
-            var rowCount = m_OptionNames[0] == "Nothing" ? m_OptionNames.Length : m_OptionNames.Length + 2;
+            var rowCount = m_FlagValues == null ? m_OptionNames.Length + 2 : m_OptionNames.Length;
             return new Vector2(m_windowSize, (EditorGUI.kSingleLineHeight + 2) * rowCount);
         }
 
@@ -137,7 +145,7 @@ namespace UnityEditor
                 // Check for m_AllLayerMask != 0 was added to cover a case when we have only the first defined Layer, Everything and Nothing.
                 // In this case optionMaskValues when Everything select it will contain [0, -1, 0] and m_AllLayerMask will be 0 when we populate it in the constructor.
                 // So when we click on Nothing we will get 0 but we will continue to show Everything as checked.
-                if((m_SelectionMaskValues[0] == m_AllLayersMask) && i == 1 && m_AllLayersMask != 0)
+                if((m_SelectionMaskValues[0] == m_AllLayersMask) && i == 1 && m_AllLayersMask != 0 && m_AutoSelectEverything)
                     toggleVal = true;
 
                 var guiRect = EditorGUILayout.GetControlRect(false, EditorGUI.kSingleLineHeight);
@@ -151,14 +159,14 @@ namespace UnityEditor
                 {
                     m_SelectionMaskValues[0] = m_OptionMaskValues[i];
                     var oldMaskValues = (uint[])m_OptionMaskValues.Clone();
-                    MaskFieldGUI.CalculateMaskValues(m_SelectionMaskValues[0], m_flagValues, ref m_OptionMaskValues);
+                    MaskFieldGUI.CalculateMaskValues(m_SelectionMaskValues[0], m_FlagValues, ref m_OptionMaskValues);
 
                     // If all flag options are selected the mask becomes everythingValue to be consistent with the "Everything" option
                     // oldMaskValues[i] == (uint)m_AllLayersMask && i == 0 && m_OptionNames[0] != "Nothing" is for case when we clicked nothing and only have the first layer defined.
                     // It will invert Nothing to Everything if we don't double-check it for Nothing separately.
                     // Check comment above to see the math why we need it separately.
-                    if (oldMaskValues[i] == (uint)m_AllLayersMask && i != 0
-                        || oldMaskValues[i] == (uint)m_AllLayersMask && i == 0 && m_OptionNames[0] != "Nothing")
+                    if ((oldMaskValues[i] == (uint)m_AllLayersMask && i != 0
+                        || oldMaskValues[i] == (uint)m_AllLayersMask && i == 0 && m_OptionNames[0] != "Nothing") && m_AutoSelectEverything)
                         oldMaskValues[i] = ~0u;
 
                     m_MaskChangeCallback.Invoke(oldMaskValues, null, i);
@@ -181,6 +189,12 @@ namespace UnityEditor
             {
                 DrawGUIForArrays();
                 return;
+            }
+
+            if (!m_SerializedProperty.isValid)
+            {
+                var serializedObject = new SerializedObject(m_Targets);
+                m_SerializedProperty = serializedObject.FindProperty(m_PropertyName);
             }
 
             if (m_SerializedProperty.propertyType != SerializedPropertyType.LayerMask)

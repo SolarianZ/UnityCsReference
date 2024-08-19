@@ -83,7 +83,7 @@ namespace UnityEditor.PackageManager.UI.Internal
         {
             var package = (item as PackageItem)?.package;
             var product = package?.product;
-            if(product == null)
+            if (product == null)
                 return;
 
             m_BackgroundFetchHandler.RemoveFromFetchProductInfoQueue(product.id);
@@ -105,7 +105,7 @@ namespace UnityEditor.PackageManager.UI.Internal
 
             m_PackageItemsLookup[visualState.packageUniqueId] = packageItem;
             var product = package?.product;
-            if(product == null)
+            if (product == null)
                 return;
 
             if (package.versions.primary.HasTag(PackageTag.Placeholder))
@@ -162,7 +162,7 @@ namespace UnityEditor.PackageManager.UI.Internal
                 return;
 
             selection ??= page.GetSelection();
-            var oldSelectedVisualStates = selectedItems.Select(item => item as VisualState).ToArray();
+            var oldSelectedVisualStates = selectedItems.OfType<VisualState>().ToArray();
             if (oldSelectedVisualStates.Length == selection.Count && oldSelectedVisualStates.All(v => selection.Contains(v.packageUniqueId)))
                 return;
 
@@ -272,8 +272,6 @@ namespace UnityEditor.PackageManager.UI.Internal
                     evt.StopPropagation();
                     break;
             }
-
-            Focus();
         }
 
         public void OnNavigationMoveShortcut(NavigationMoveEvent evt)

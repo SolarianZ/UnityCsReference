@@ -89,6 +89,7 @@ namespace UnityEditor.Build.Profile
                     Save();
                     EditorUserBuildSettings.SetBuildProfilePath(string.Empty);
                     activeProfileChanged?.Invoke(prev, m_ActiveProfile);
+                    OnActiveProfileChangedForSettingExtension(prev, null);
                     BuildProfileModuleUtil.RequestScriptCompilation(null);
                     return;
                 }
@@ -104,9 +105,20 @@ namespace UnityEditor.Build.Profile
                 Save();
                 EditorUserBuildSettings.SetBuildProfilePath(AssetDatabase.GetAssetPath(m_ActiveProfile));
                 activeProfileChanged?.Invoke(prev, m_ActiveProfile);
+                OnActiveProfileChangedForSettingExtension(prev, m_ActiveProfile);
                 m_ActiveProfile.UpdateGlobalManagerPlayerSettings();
                 BuildProfileModuleUtil.RequestScriptCompilation(m_ActiveProfile);
             }
+        }
+
+        void OnActiveProfileChangedForSettingExtension(BuildProfile previous, BuildProfile newProfile)
+        {
+            BuildTargetDiscovery.TryGetBuildTarget(EditorUserBuildSettings.activeBuildTarget, out IBuildTarget iBuildTarget);
+            if (iBuildTarget == null)
+                return;
+
+            var settingsExtension = ModuleManager.GetEditorSettingsExtension(iBuildTarget.TargetName);
+            settingsExtension?.OnActiveProfileChanged(previous, newProfile);
         }
 
         internal static void HandlePendingChangesBeforeEnterPlaymode()
@@ -133,7 +145,7 @@ namespace UnityEditor.Build.Profile
         /// activeProfileChanged += (BuildProfile prev, BuildProfile cur) => {}
         /// </code>
         /// </remarks>
-        public event Action<BuildProfile, BuildProfile> activeProfileChanged;
+        public static event Action<BuildProfile, BuildProfile> activeProfileChanged;
 
         /// <summary>
         /// Stores metadata required for Build Profile window and legacy APIs
@@ -466,8 +478,6 @@ namespace UnityEditor.Build.Profile
                 Debug.LogError($"Build profile extension is null for module {module} and build profile {buildProfile.name}");
             }
 
-            SaveBuildProfileInProject(buildProfile);
-
             return buildProfile;
         }
 
@@ -490,8 +500,6 @@ namespace UnityEditor.Build.Profile
             // Only copy after setting shared profile, so EditorUserBuildSettings can access the shared profile
             // when copying the settings.
             EditorUserBuildSettings.CopyToBuildProfile(buildProfile);
-
-            SaveBuildProfileInProject(buildProfile);
 
             return buildProfile;
         }
@@ -569,6 +577,8 @@ namespace UnityEditor.Build.Profile
             s_Instance.cachedEditorScriptingDefines = BuildDefines.GetBuildProfileScriptDefines();
 
             BuildProfileModuleUtil.DeleteLastRunnableBuildKeyForDeletedProfiles();
+
+            s_Instance.OnActiveProfileChangedForSettingExtension(null, s_Instance.m_ActiveProfile);
         }
 
         [RequiredByNativeCode, UsedImplicitly]
@@ -622,6 +632,26 @@ namespace UnityEditor.Build.Profile
                 return AssetDatabase.GetAssetPath(instance.activeProfile);
 
             return string.Empty;
+        }
+
+        [RequiredByNativeCode]
+        static bool HasActiveProfileWithPlayerSettings(out int instanceID)
+        {
+            var activeProfile = instance.activeProfile;
+            if (activeProfile?.playerSettings != null)
+            {
+                instanceID = activeProfile.GetInstanceID();
+                return true;
+            }
+
+            instanceID = 0;
+            return false;
+        }
+
+        [RequiredByNativeCode]
+        static void UpdateActiveProfilePlayerSettingsObjectFromYAML()
+        {
+            instance.activeProfile?.UpdatePlayerSettingsObjectFromYAML();
         }
 
         static bool ShouldReturnActiveProfile(BuildTarget buildTarget, StandaloneBuildSubtarget subtarget, string sharedSetting = null)

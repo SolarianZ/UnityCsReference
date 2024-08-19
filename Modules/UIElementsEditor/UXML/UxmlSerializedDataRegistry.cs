@@ -6,6 +6,7 @@ using JetBrains.Annotations;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Unity.Jobs;
 using UnityEngine;
 using UnityEngine.Bindings;
 using UnityEngine.Scripting.APIUpdating;
@@ -16,6 +17,8 @@ namespace UnityEditor.UIElements
     [VisibleToOtherModules("UnityEditor.UIBuilderModule")]
     internal static class UxmlSerializedDataRegistry
     {
+        private static JobHandle? k_UxmlRegistryRegistrationHandle;
+
         static bool s_Registered;
 
         static readonly Dictionary<string, Type> s_MovedTypes = new();
@@ -23,15 +26,35 @@ namespace UnityEditor.UIElements
 
         public static Dictionary<string, Type> SerializedDataTypes { get; } = new();
 
-        [UsedImplicitly, InitializeOnLoadMethod]
-        internal static void RegisterDependencies()
+        [UsedImplicitly]
+        internal static void GenerateUxmlRegistries()
+        {
+            k_UxmlRegistryRegistrationHandle = new InitializeUxmlRegistryDescriptions().Schedule();
+        }
+
+        [UsedImplicitly]
+        internal static void RegisterCustomDependencies()
         {
             // No need to register custom dependencies when going to play mode
             if (EditorApplication.isPlayingOrWillChangePlaymode)
                 return;
 
-            Register();
+            if (k_UxmlRegistryRegistrationHandle is { IsCompleted: false })
+            {
+                // Force the initialization to complete, calling all the "initialize on load" should
+                // give us enough time to process all the registry.
+                k_UxmlRegistryRegistrationHandle?.Complete();
+            }
+
             UxmlCodeDependencies.instance.RegisterUxmlSerializedDataDependencies(SerializedDataTypes);
+        }
+
+        struct InitializeUxmlRegistryDescriptions : IJob
+        {
+            public void Execute()
+            {
+                Register();
+            }
         }
 
         // Used for testing
@@ -54,8 +77,7 @@ namespace UnityEditor.UIElements
 
         public static UxmlSerializedDataDescription GetDescription(string typeName)
         {
-            if (!s_Registered)
-                Register();
+            ForceRegistrationCompletion();
 
             if (s_DescriptionsCache.TryGetValue(typeName, out var desc))
                 return desc;
@@ -70,8 +92,7 @@ namespace UnityEditor.UIElements
 
         public static Type GetDataType(string typeName)
         {
-            if (!s_Registered)
-                Register();
+            ForceRegistrationCompletion();
 
             if (!SerializedDataTypes.TryGetValue(typeName, out var type) && !s_MovedTypes.TryGetValue(typeName, out type))
                 return null;
@@ -94,7 +115,8 @@ namespace UnityEditor.UIElements
                 var declaringType = serializedDataType.DeclaringType;
 
                 var uxmlElementAttribute = declaringType.GetCustomAttribute<UxmlElementAttribute>();
-                if (uxmlElementAttribute != null && !string.IsNullOrEmpty(uxmlElementAttribute.name))
+                if (uxmlElementAttribute != null && !string.IsNullOrEmpty(uxmlElementAttribute.name) &&
+                    uxmlElementAttribute.name != declaringType.Name) // Ignore the default name (UUM-73716)
                 {
                     var nameValidationError = UxmlUtility.ValidateUxmlName(uxmlElementAttribute.name);
                     if (nameValidationError != null)
@@ -113,17 +135,30 @@ namespace UnityEditor.UIElements
             }
 
             s_Registered = true;
+            k_UxmlRegistryRegistrationHandle = null;
         }
 
         static void RegisterType(string typeName, Type serializedDataType)
         {
             if (SerializedDataTypes.TryGetValue(typeName, out var desc))
             {
-                Debug.LogError($"A UxmlElement for the type {typeName} in the assembly {serializedDataType.Assembly.GetName().Name} was already registered from another assembly {desc.Assembly.GetName().Name}.");
+                if (serializedDataType == desc)
+                {
+                    Debug.LogWarning($"UxmlElement Registration: The UxmlElement of type '{typeName}' in the assembly '{serializedDataType.Assembly.GetName().Name}' has already been registered.");
+                    return;
+                }
+
+                if (serializedDataType.Assembly != desc.Assembly)
+                    Debug.LogError($"UxmlElement Registration Error: A UxmlElement of type '{typeName}' in the assembly '{serializedDataType.Assembly.GetName().Name}' has already been registered by a different assembly '{desc.Assembly.GetName().Name}.");
+                else
+                    Debug.LogError($"UxmlElement Registration Error: A UxmlElement of type '{typeName}' is already registered with '{desc.Name}'. It cannot be registered again with '{serializedDataType.Name}'.");
+
                 return;
             }
 
             SerializedDataTypes[typeName] = serializedDataType;
+            // Force the generation of the uxml description so that it happens on the background thread.
+            UxmlDescriptionRegistry.GetDescription(serializedDataType);
 
             // Check for MovedFromAttribute
             var elementType = serializedDataType.DeclaringType;
@@ -139,6 +174,19 @@ namespace UnityEditor.UIElements
 
                 s_MovedTypes[fullOldName] = serializedDataType;
             }
+        }
+
+        private static void ForceRegistrationCompletion()
+        {
+            if (s_Registered)
+                return;
+
+            // If this was called before the job was even started, run the registration in a synced manner, otherwise force
+            // the job to complete.
+            if (k_UxmlRegistryRegistrationHandle.HasValue)
+                k_UxmlRegistryRegistrationHandle?.Complete();
+            else
+                Register();
         }
     }
 }

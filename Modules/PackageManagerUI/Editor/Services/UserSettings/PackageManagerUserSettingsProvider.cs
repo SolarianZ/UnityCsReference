@@ -225,7 +225,7 @@ namespace UnityEditor.PackageManager.UI.Internal
 
             if (m_ApplicationProxy.isBatchMode || !m_ApplicationProxy.DisplayDialog("abortDownloadBeforeChangeAssetsCacheLocation",
                 L10n.Tr("Changing Assets Cache location"),
-                L10n.Tr("Changing the Assets Cache location will abort all downloads in progress."),
+                L10n.Tr("Changing the Assets Cache location will cancel all downloads in progress."),
                 L10n.Tr("Continue"), L10n.Tr("Cancel")))
                 return false;
 
@@ -262,7 +262,7 @@ namespace UnityEditor.PackageManager.UI.Internal
             {
                 if (m_CurrentAssetStoreConfig.status == AssetStoreCachePathManager.ConfigStatus.ReadOnly)
                     DisplayAssetsCacheErrorBox(HelpBoxMessageType.Warning, L10n.Tr("The Assets Cache location is read only. Download or update of assets won't be possible."));
-                else if (m_CurrentAssetStoreConfig.status != AssetStoreCachePathManager.ConfigStatus.Success)
+                else if (m_CurrentAssetStoreConfig.status != AssetStoreCachePathManager.ConfigStatus.Success && m_CurrentAssetStoreConfig.status != AssetStoreCachePathManager.ConfigStatus.Default)
                     DisplayAssetsCacheErrorBox(HelpBoxMessageType.Error, L10n.Tr("The Assets Cache location is invalid or inaccessible. Change location or reset it to default location."));
             }
         }

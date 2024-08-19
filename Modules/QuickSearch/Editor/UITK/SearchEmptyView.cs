@@ -399,6 +399,7 @@ namespace UnityEditor.Search
         private static ISearchQuery CreateQuery(string queryStr)
         {
             var q = new SearchQuery() { searchText = queryStr };
+            q.isTextOnlyQuery = true;
             q.viewState.itemSize = SearchSettings.itemIconSize;
             return q;
         }
@@ -674,6 +675,11 @@ namespace UnityEditor.Search
         void IResultView.OnGroupChanged(string prevGroupId, string newGroupId)
         {
             BuildView();
+        }
+
+        void IResultView.OnItemSourceChanged(ISearchList itemSource)
+        {
+            // Nothing to do
         }
 
         void IResultView.AddSaveQueryMenuItems(SearchContext context, GenericMenu menu)

@@ -55,10 +55,16 @@ namespace UnityEngine.UIElements
             public Color color;
             public ScaleMode scaleMode;
 
+            public IntPtr backgroundRepeatInstanceList;
+            public int backgroundRepeatInstanceListStartIndex;
+            public int backgroundRepeatInstanceListEndIndex;
+
             public Vector2 topLeftRadius;
             public Vector2 topRightRadius;
             public Vector2 bottomRightRadius;
             public Vector2 bottomLeftRadius;
+
+            public Rect backgroundRepeatRect;
 
             public IntPtr texture;
             public IntPtr sprite;

@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEngine;
@@ -81,6 +82,7 @@ namespace UnityEditor.PackageManager.UI.Internal
 
         [NonSerialized]
         protected IPackageDatabase m_PackageDatabase;
+        [ExcludeFromCodeCoverage]
         public void ResolveDependencies(IPackageDatabase packageDatabase)
         {
             m_PackageDatabase = packageDatabase;
@@ -149,7 +151,7 @@ namespace UnityEditor.PackageManager.UI.Internal
 
                 CheckEntitlementStatusAndTriggerEvents(addList, updateList, removeList);
 
-                UpdateVisualStateVisibilityWithSearchText();
+                FilterPackagesBySearchText();
             }
         }
 
@@ -160,7 +162,7 @@ namespace UnityEditor.PackageManager.UI.Internal
             AmendSelection(new[] { finalPackageUniqueId }, new[] { tempPackageUniqueId });
         }
 
-        public void UpdateVisualStateVisibilityWithSearchText()
+        public virtual void FilterPackagesBySearchText()
         {
             var changedVisualStates = new List<VisualState>();
             foreach (var state in visualStates)
@@ -345,7 +347,7 @@ namespace UnityEditor.PackageManager.UI.Internal
             return !m_CollapsedGroups.Contains(groupName);
         }
 
-        public void SetGroupExpanded(string groupName, bool value)
+        public virtual void SetGroupExpanded(string groupName, bool value)
         {
             if (value)
                 m_CollapsedGroups.RemoveAll(i => i == groupName);

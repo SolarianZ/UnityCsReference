@@ -19,8 +19,8 @@ namespace UnityEditor
         SerializedProperty m_UseFullKinematicContacts;
         SerializedProperty m_UseAutoMass;
         SerializedProperty m_Mass;
-        SerializedProperty m_LinearDrag;
-        SerializedProperty m_AngularDrag;
+        SerializedProperty m_LinearDamping;
+        SerializedProperty m_AngularDamping;
         SerializedProperty m_GravityScale;
         SerializedProperty m_Interpolate;
         SerializedProperty m_SleepingMode;
@@ -44,6 +44,7 @@ namespace UnityEditor
 
         private SavedBool m_ShowLayerOverridesFoldout;
         private SavedBool m_ShowInfoFoldout;
+        private SavedBool m_ShowContactsFoldout;
         private bool m_RequiresConstantRepaint;
 
         const int k_ToggleOffset = 30;
@@ -58,8 +59,8 @@ namespace UnityEditor
             m_UseFullKinematicContacts = serializedObject.FindProperty("m_UseFullKinematicContacts");
             m_UseAutoMass = serializedObject.FindProperty("m_UseAutoMass");
             m_Mass = serializedObject.FindProperty("m_Mass");
-            m_LinearDrag = serializedObject.FindProperty("m_LinearDrag");
-            m_AngularDrag = serializedObject.FindProperty("m_AngularDrag");
+            m_LinearDamping = serializedObject.FindProperty("m_LinearDamping");
+            m_AngularDamping = serializedObject.FindProperty("m_AngularDamping");
             m_GravityScale = serializedObject.FindProperty("m_GravityScale");
             m_Interpolate = serializedObject.FindProperty("m_Interpolate");
             m_SleepingMode = serializedObject.FindProperty("m_SleepingMode");
@@ -77,10 +78,15 @@ namespace UnityEditor
             m_ShowLayerOverrides.valueChanged.AddListener(Repaint);
             m_ShowLayerOverridesFoldout = new SavedBool($"{target.GetType() }.ShowLayerOverridesFoldout", false);
             m_ShowLayerOverrides.value = m_ShowLayerOverridesFoldout.value;
+
             m_ShowInfo.valueChanged.AddListener(Repaint);
             m_ShowInfoFoldout = new SavedBool($"{target.GetType()}.ShowInfoFoldout", false);
             m_ShowInfo.value = m_ShowInfoFoldout.value;
+
             m_ShowContacts.valueChanged.AddListener(Repaint);
+            m_ShowContactsFoldout = new SavedBool($"{target.GetType()}.ShowContactsFoldout", false);
+            m_ShowContacts.value = m_ShowContactsFoldout.value;
+
             m_ContactScrollPosition = Vector2.zero;
 
             m_RequiresConstantRepaint = false;
@@ -144,8 +150,8 @@ namespace UnityEditor
                             }
                         }
 
-                        EditorGUILayout.PropertyField(m_LinearDrag);
-                        EditorGUILayout.PropertyField(m_AngularDrag);
+                        EditorGUILayout.PropertyField(m_LinearDamping);
+                        EditorGUILayout.PropertyField(m_AngularDamping);
                         EditorGUILayout.PropertyField(m_GravityScale);
                     }
                     EditorGUILayout.EndFadeGroup();
@@ -215,7 +221,7 @@ namespace UnityEditor
                     EditorGUI.BeginDisabledGroup(true);
                     EditorGUILayout.Vector2Field("Position", body.position);
                     EditorGUILayout.FloatField("Rotation", body.rotation);
-                    EditorGUILayout.Vector2Field("Velocity", body.velocity);
+                    EditorGUILayout.Vector2Field("Linear Velocity", body.linearVelocity);
                     EditorGUILayout.FloatField("Angular Velocity", body.angularVelocity);
                     EditorGUILayout.FloatField("Inertia", body.inertia);
                     EditorGUILayout.Vector2Field("Local Center of Mass", body.centerOfMass);
@@ -239,7 +245,7 @@ namespace UnityEditor
         void ShowContacts(Rigidbody2D body)
         {
             EditorGUI.indentLevel++;
-            m_ShowContacts.target = EditorGUILayout.Foldout(m_ShowContacts.target, "Contacts", true);
+            m_ShowContactsFoldout.value = m_ShowContacts.target = EditorGUILayout.Foldout(m_ShowContacts.target, "Contacts", true);
             if (EditorGUILayout.BeginFadeGroup(m_ShowContacts.faded))
             {
                 var contactCount = body.GetContacts(m_Contacts);

@@ -56,6 +56,7 @@ namespace UnityEditor.Overlays
             {
                 m_Menu = menu;
                 Add(m_GlobalToolbar = new VisualElement());
+                m_GlobalToolbar.AddToClassList("unity-editor-toolbar-element");
                 m_GlobalToolbar.style.flexDirection = horizontal ? FlexDirection.Row : FlexDirection.Column;
 
                 m_Separator = new VisualElement() { name = "Separator" };
@@ -63,6 +64,7 @@ namespace UnityEditor.Overlays
                 Add(m_Separator);
 
                 Add(m_TransientToolbar = new VisualElement());
+                m_TransientToolbar.AddToClassList("unity-editor-toolbar-element");
                 m_TransientToolbar.style.flexDirection = horizontal ? FlexDirection.Row : FlexDirection.Column;
 
                 m_Overlays = new List<(Overlay, int)>();
@@ -130,12 +132,16 @@ namespace UnityEditor.Overlays
             if (targetWindow is ISupportsOverlays)
             {
                 var binding = ShortcutManager.instance.GetShortcutBinding(k_ShowOverlayMenuShortcut);
+                var itemContent = EditorGUIUtility.TrTextContent($"Overlay Menu _{binding}");
 
-                menu.AddItem(EditorGUIUtility.TrTextContent($"Overlay Menu _{binding}"), false,
-                    () =>
-                    {
-                        targetWindow.overlayCanvas.ShowPopup<OverlayMenu>();
-                    });
+
+                if (targetWindow.overlayCanvas.overlaysSupportEnabled)
+                {
+                    menu.AddItem(itemContent, false,
+                        () => { targetWindow.overlayCanvas.ShowPopup<OverlayMenu>(); });
+                }
+                else
+                    menu.AddDisabledItem(itemContent);
             }
         }
 

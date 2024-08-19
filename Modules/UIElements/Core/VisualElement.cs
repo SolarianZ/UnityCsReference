@@ -66,9 +66,11 @@ namespace UnityEngine.UIElements
         StyleInitialized = 1 << 13,
         // Element is not rendered, but we keep the generated geometry in case it is shown later
         DisableRendering = 1 << 14,
+        // The DataSource tracking of the element should not ne processed when the element has not been configured properly
+        DetachedDataSource = 1 << 15,
 
         // Element initial flags
-        Init = WorldTransformDirty | WorldTransformInverseDirty | WorldClipDirty | BoundingBoxDirty | WorldBoundingBoxDirty | EventInterestParentCategoriesDirty
+        Init = WorldTransformDirty | WorldTransformInverseDirty | WorldClipDirty | BoundingBoxDirty | WorldBoundingBoxDirty | EventInterestParentCategoriesDirty | DetachedDataSource
     }
 
     /// <summary>
@@ -735,7 +737,7 @@ namespace UnityEngine.UIElements
         // This will replace the Rect position
         // origin and size relative to parent
         /// <summary>
-        /// The position and size of the VisualElement relative to its parent, as computed by the layout system.
+        /// The position and size of the VisualElement relative to its parent, as computed by the layout system. (RO)
         /// </summary>
         /// <remarks>
         /// Before reading from this property, add it to a panel and wait for one frame to ensure that the element layout is computed.
@@ -813,7 +815,7 @@ namespace UnityEngine.UIElements
         }
 
         /// <summary>
-        /// The rectangle of the content area of the element, in the local space of the element.
+        /// The rectangle of the content area of the element, in the local space of the element. (RO)
         /// </summary>
         /// <remarks>
         /// In the box model used by UI Toolkit, the content area refers to the inner rectangle for displaying text and images.
@@ -1618,7 +1620,7 @@ namespace UnityEngine.UIElements
                 // Better to do some things here before we call the user's callback as some state may be modified during the callback.
                 UnregisterRunningAnimations();
                 CreateBindingRequests();
-                TrackSource(dataSource, null);
+                DetachDataSource();
 
                 // Only send this event if the element isn't waiting for an attach event already
                 if ((m_Flags & VisualElementFlags.NeedsAttachToPanelEvent) == 0)
@@ -1647,7 +1649,7 @@ namespace UnityEngine.UIElements
 
                 RegisterRunningAnimations();
                 ProcessBindingRequests();
-                TrackSource(null, dataSource);
+                AttachDataSource();
 
                 // We need to reset any visual pseudo state
                 pseudoStates &= ~(PseudoStates.Focus | PseudoStates.Active | PseudoStates.Hover);
@@ -1687,10 +1689,14 @@ namespace UnityEngine.UIElements
         /// <summary>
         /// Sends an event to the event handler.
         /// </summary>
-        /// <param name="e">The event to send.</param>
         /// <remarks>
-        /// This forwards the event to the event dispatcher.
+        /// The event is forwarded to the event dispatcher for processing.
+        /// For more information, refer to [[wiki:UIE-Events-Synthesizing|Synthesize and send events]].
         /// </remarks>
+        /// <remarks>
+        /// SA: [[IEventHandler.HandleEvent]], [[EventDispatcher]], [[EventBase]]
+        /// </remarks>
+        /// <param name="e">The event to send.</param>
         public sealed override void SendEvent(EventBase e)
         {
             elementPanel?.SendEvent(e);
@@ -2449,6 +2455,12 @@ namespace UnityEngine.UIElements
         {
             CheckUserKeyArgument(key);
             return m_PropertyBag?.ContainsKey(key) == true;
+        }
+
+        internal bool ClearProperty(PropertyName key)
+        {
+            CheckUserKeyArgument(key);
+            return m_PropertyBag?.Remove(key) ?? false;
         }
 
         static void CheckUserKeyArgument(PropertyName key)

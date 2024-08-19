@@ -67,6 +67,7 @@ namespace Unity.UI.Builder
         public static string UssPath_InspectorWindow_Themed => EditorGUIUtility.isProSkin ? UssPath_InspectorWindow_Dark : UssPath_InspectorWindow_Light;
 
         public const string UssPath_BindingWindow = BuilderConstants.UIBuilderPackagePath + "/Inspector/BindingWindow.uss";
+        public const string UssPath_NewClassWindow = BuilderConstants.UIBuilderPackagePath + "/Inspector/NewClassWindow.uss";
 
         // Global Style Class Names
         public static readonly string HiddenStyleClassName = "unity-builder-hidden";
@@ -204,6 +205,9 @@ namespace Unity.UI.Builder
         public static readonly string ContextMenuRemoveBindingMessage = "Remove binding";
         public static readonly string ContextMenuEditInlineValueMessage = "Edit inline value...";
         public static readonly string ContextMenuUnsetInlineValueMessage = "Unset inline value";
+        public static readonly string ContextMenuExtractInlineValueMessage = "Extract Inlined Style to Selector";
+        public static readonly string ContextMenuExtractAllInlineValuesMessage = "Extract All Inlined Styles to Selector";
+        public static readonly string ContextMenuNewClassMessage = "New Class...";
         public static readonly string InspectorClassPillDoubleClickToCreate = "Double-click to create new USS selector.";
         public static readonly string InspectorClassPillDoubleClickToSelect = "Double-click to select and edit USS selector.";
         public static readonly string InspectorLocalStylesSectionTitleForSelector = "Styles";
@@ -291,7 +295,7 @@ namespace Unity.UI.Builder
             {"flex", ""},
             {"flex-basis", "Initial main size of a flex item, on the main flex axis. The final layout might be smaller or larger, according to the flex shrinking and growing determined by the other flex properties."},
             {"flex-direction", "Direction of the main axis to layout children in a container."},
-            {"flex-grow", "Specifies how the item will shrink relative to the rest of the flexible items inside the same container."},
+            {"flex-grow", "Specifies how the item will grow relative to the rest of the flexible items inside the same container."},
             {"flex-shrink", "Specifies how the item will shrink relative to the rest of the flexible items inside the same container."},
             {"flex-wrap", "Placement of children over multiple lines if not enough space is available in this container."},
             {"font-size", "Font size to draw the element's text."},
@@ -665,7 +669,7 @@ namespace Unity.UI.Builder
         //
 
         // Generic Dialog Messages
-        public static readonly string DialogOkOption = "Ok";
+        public static readonly string DialogOkOption = "OK";
         public static readonly string DialogCancelOption = "Cancel";
         public static readonly string DialogDiscardOption = "Discard changes and {0}";
         public static readonly string DialogAbortActionOption = "Do not {0}";

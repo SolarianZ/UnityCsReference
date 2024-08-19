@@ -4,6 +4,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using UnityEngine;
 
@@ -63,12 +64,12 @@ namespace UnityEditor.PackageManager.UI.Internal
             TriggerOnVisualStateChange(unlockedVisualStates);
         }
 
-        public void RebuildVisualStatesAndUpdateVisibilityWithSearchText()
+        public virtual void RebuildVisualStatesAndUpdateVisibilityWithSearchText()
         {
             RebuildAndReorderVisualStates();
             RefreshSupportedStatusFiltersOnEntitlementPackageChange();
             TriggerListRebuild();
-            UpdateVisualStateVisibilityWithSearchText();
+            FilterPackagesBySearchText();
         }
 
         public override void OnActivated()
@@ -115,13 +116,15 @@ namespace UnityEditor.PackageManager.UI.Internal
 
         public override bool GetDefaultLockState(IPackage package)
         {
-            return package.versions.installed?.isDirectDependency != true &&
-                m_PackageDatabase.GetFeaturesThatUseThisPackage(package.versions.installed)?.Any() == true;
+            return package.isLocked;
         }
 
         // All the following load functions do nothing, because for a SimplePage we already know the complete list and there's no more to load
+        [ExcludeFromCodeCoverage]
         public override void LoadMore(long numberOfPackages) {}
+        [ExcludeFromCodeCoverage]
         public override void Load(string packageUniqueId) {}
+        [ExcludeFromCodeCoverage]
         public override void LoadExtraItems(IEnumerable<IPackage> packages) {}
 
         private class PackageComparer : IComparer<IPackage>

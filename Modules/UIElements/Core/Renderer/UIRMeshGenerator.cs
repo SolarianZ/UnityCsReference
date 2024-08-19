@@ -8,6 +8,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
 using Unity.Profiling;
 using UnityEngine.TextCore.LowLevel;
@@ -40,6 +41,13 @@ namespace UnityEngine.UIElements.UIR
             public Rect uv;
         }
 
+        public struct BackgroundRepeatInstance
+        {
+            public Rect rect;
+            public Rect backgroundRepeatRect;
+            public Rect uv;
+        }
+
         static readonly ProfilerMarker k_MarkerDrawRectangle = new("MeshGenerator.DrawRectangle");
         static readonly ProfilerMarker k_MarkerDrawBorder = new("MeshGenerator.DrawBorder");
         static readonly ProfilerMarker k_MarkerDrawVectorImage = new("MeshGenerator.DrawVectorImage");
@@ -48,6 +56,8 @@ namespace UnityEngine.UIElements.UIR
         MeshGenerationContext m_MeshGenerationContext;
 
         List<RepeatRectUV>[] m_RepeatRectUVList = null;
+
+        NativePagedList<BackgroundRepeatInstance> m_BackgroundRepeatInstanceList = null;
 
         GCHandlePool m_GCHandlePool = new();
 
@@ -122,6 +132,14 @@ namespace UnityEngine.UIElements.UIR
 
             // Normalized visible sub-region
             public Rect subRect;
+
+            // Rectangle which clip the resulting tessellated geometry for background repeat to correctly support rounded corners.
+            // When backgroundRepeatRect is not empty, it represent the clipped portion of the original visual element (represented by rect)
+            // that should be repeated.
+            public Rect backgroundRepeatRect;
+            public NativePagedList<BackgroundRepeatInstance> backgroundRepeatInstanceList;
+            public int backgroundRepeatInstanceListStartIndex;
+            public int backgroundRepeatInstanceListEndIndex;
 
             // Allow support of background-properties
             public BackgroundPosition backgroundPositionX;
@@ -522,6 +540,7 @@ namespace UnityEngine.UIElements.UIR
                 return new MeshBuilderNative.NativeRectParams() {
                     rect = rect,
                     subRect = subRect,
+                    backgroundRepeatRect = backgroundRepeatRect,
                     uv = uv,
                     color = color,
                     scaleMode = scaleMode,
@@ -629,12 +648,23 @@ namespace UnityEngine.UIElements.UIR
         public void DrawNativeText(NativeTextInfo textInfo, Vector2 pos)
         {
             DrawTextBase(null, textInfo, pos, true);
+
+            // Call Texture.Apply for all texture still dirty
+            // There are no other place where we are calling this to export the texture to the gpu
+            // for the ATG. This is as late as it could be right now.
+
+            // I am putting it here as this will only be call if an ATG-text has been modified
+            // and it will not be called when non-atg text only are modified
+            // Trying to keep the codepath separated for now.
+
+            // Finally, calling this once per text element is not optimal but the code underneath
+            // should simply retrun if there is nothing to apply
+            FontAsset.UpdateFontAssetsInUpdateQueue();
         }
 
         void DrawTextBase(TextCore.Text.TextInfo textInfo, NativeTextInfo nativeTextInfo, Vector2 pos, bool isNative)
         {
-            int vSrc = 0;
-            for (int i = 0, meshInfoCount = isNative ? nativeTextInfo.fontAssetIds.Length : textInfo.meshInfo.Length; i < meshInfoCount; i++)
+            for (int i = 0, meshInfoCount = isNative ? nativeTextInfo.meshInfos.Length : textInfo.meshInfo.Length; i < meshInfoCount; i++)
             {
                 MeshInfo meshInfo = new();
                 FontAsset fa = null;
@@ -647,9 +677,9 @@ namespace UnityEngine.UIElements.UIR
                 }
                 else
                 {
-                    int glyphAmount = nativeTextInfo.fontAssetLastGlyphIndex[i] - (i > 0 ? nativeTextInfo.fontAssetLastGlyphIndex[i - 1] : 0);
+                    int glyphAmount = nativeTextInfo.meshInfos[i].textElementInfos.Length;
                     remainingVertexCount = glyphAmount * 4;
-                    fa = nativeTextInfo.fontAssets[i];
+                    fa = nativeTextInfo.meshInfos[i].fontAsset;
                 }
 
                 int verticesPerAlloc = (int)(UIRenderDevice.maxVerticesPerPage & ~3); // Round down to multiple of 4
@@ -665,14 +695,14 @@ namespace UnityEngine.UIElements.UIR
 
                     m_MeshGenerationContext.AllocateTempMesh(vertexCount, indexCount, out var vertices, out var indices);
 
-                    for (int vDst = 0, j = 0; vDst < vertexCount; vDst += 4, vSrc += 1, j += 6)
+                    for (int vDst = 0, vSrc = 0, j = 0; vDst < vertexCount; vDst += 4, vSrc += 1, j += 6)
                     {
                         if (isNative)
                         {
-                            vertices[vDst + 0] = ConvertTextVertexToUIRVertex(nativeTextInfo.textElementInfos[vSrc].bottomLeft, pos);
-                            vertices[vDst + 1] = ConvertTextVertexToUIRVertex(nativeTextInfo.textElementInfos[vSrc].topLeft, pos);
-                            vertices[vDst + 2] = ConvertTextVertexToUIRVertex(nativeTextInfo.textElementInfos[vSrc].topRight, pos);
-                            vertices[vDst + 3] = ConvertTextVertexToUIRVertex(nativeTextInfo.textElementInfos[vSrc].bottomRight, pos);
+                            vertices[vDst + 0] = ConvertTextVertexToUIRVertex(nativeTextInfo.meshInfos[i].textElementInfos[vSrc].bottomLeft, pos);
+                            vertices[vDst + 1] = ConvertTextVertexToUIRVertex(nativeTextInfo.meshInfos[i].textElementInfos[vSrc].topLeft, pos);
+                            vertices[vDst + 2] = ConvertTextVertexToUIRVertex(nativeTextInfo.meshInfos[i].textElementInfos[vSrc].topRight, pos);
+                            vertices[vDst + 3] = ConvertTextVertexToUIRVertex(nativeTextInfo.meshInfos[i].textElementInfos[vSrc].bottomRight, pos);
                         }
                         else
                         {
@@ -801,6 +831,14 @@ namespace UnityEngine.UIElements.UIR
                 rectangleJobParameters.rectParams.spriteUVs = m_GCHandlePool.GetIntPtr(rectParams.sprite.uv);
                 rectangleJobParameters.rectParams.spriteTriangles = m_GCHandlePool.GetIntPtr(rectParams.sprite.triangles);
             }
+
+            if (rectParams.backgroundRepeatInstanceList != null)
+            {
+                rectangleJobParameters.rectParams.backgroundRepeatInstanceListStartIndex = rectParams.backgroundRepeatInstanceListStartIndex;
+                rectangleJobParameters.rectParams.backgroundRepeatInstanceListEndIndex = rectParams.backgroundRepeatInstanceListEndIndex;
+                rectangleJobParameters.rectParams.backgroundRepeatInstanceList = m_GCHandlePool.GetIntPtr(rectParams.backgroundRepeatInstanceList);
+            }
+
             rectangleJobParameters.rectParams.vectorImage = m_GCHandlePool.GetIntPtr(rectParams.vectorImage);
 
             bool isUsingGradients = rectParams.vectorImage?.atlas != null;
@@ -1265,6 +1303,21 @@ namespace UnityEngine.UIElements.UIR
             }
 
             Rect originalUV = new Rect(uv);
+            int totalRepeatCount = m_RepeatRectUVList[1].Count * m_RepeatRectUVList[0].Count;
+            if (totalRepeatCount > 1)
+            {
+                if (rectParams.vectorImage == null)
+                {
+                    if (m_BackgroundRepeatInstanceList == null)
+                    {
+                        m_BackgroundRepeatInstanceList = new NativePagedList<BackgroundRepeatInstance>(8, Allocator.Persistent, Allocator.TempJob);
+                    }
+                    rectParams.backgroundRepeatInstanceList = m_BackgroundRepeatInstanceList;
+                    rectParams.backgroundRepeatInstanceListStartIndex = m_BackgroundRepeatInstanceList.GetCount();
+                }
+            }
+
+            int currentTotalRepeatCount = 0;
 
             foreach (var y in m_RepeatRectUVList[1])
             {
@@ -1343,12 +1396,33 @@ namespace UnityEngine.UIElements.UIR
                         targetRect.width = left;
                     }
 
-                    StampRectangleWithSubRect(rectParams, targetRect, uv);
+                    StampRectangleWithSubRect(rectParams, targetRect, totalRect, uv, ref rectParams.backgroundRepeatInstanceList);
+                    currentTotalRepeatCount++;
+
+                    // Make sure to do some work in parallel
+                    if (rectParams.backgroundRepeatInstanceList != null)
+                    {
+                        if (currentTotalRepeatCount  > 60)
+                        {
+                            currentTotalRepeatCount = 0;
+
+                            rectParams.backgroundRepeatInstanceListEndIndex = m_BackgroundRepeatInstanceList.GetCount();
+                            DrawRectangle(rectParams);
+
+                            rectParams.backgroundRepeatInstanceListStartIndex = rectParams.backgroundRepeatInstanceListEndIndex;
+                        }
+                    }
                 }
+            }
+
+            if (rectParams.backgroundRepeatInstanceList != null && currentTotalRepeatCount > 0)
+            {
+                rectParams.backgroundRepeatInstanceListEndIndex = m_BackgroundRepeatInstanceList.GetCount();
+                DrawRectangle(rectParams);
             }
         }
 
-        void StampRectangleWithSubRect(RectangleParams rectParams, Rect targetRect, Rect targetUV)
+        void StampRectangleWithSubRect(RectangleParams rectParams, Rect targetRect, Rect totalRect, Rect targetUV, ref NativePagedList<BackgroundRepeatInstance> backgroundRepeatInstanceList)
         {
             if (targetRect.width < UIRUtility.k_Epsilon || targetRect.height < UIRUtility.k_Epsilon)
                 return;
@@ -1366,6 +1440,7 @@ namespace UnityEngine.UIElements.UIR
             if (rectParams.HasSlices(UIRUtility.k_Epsilon))
             {
                 // Use the full target rect when working with slices. The content will stretch to the full target.
+                rectParams.backgroundRepeatRect = Rect.zero;
                 rectParams.rect = targetRect;
             }
             else
@@ -1395,10 +1470,38 @@ namespace UnityEngine.UIElements.UIR
                     rectParams.uv.size = newUVSize;
                 }
 
-                rectParams.rect = rect;
+                if (rectParams.vectorImage != null)
+                {
+                    rectParams.backgroundRepeatRect = Rect.zero;
+                    rectParams.rect = rect;
+                }
+                else
+                {
+                    if (totalRect == rect)
+                    {
+                        rectParams.backgroundRepeatRect = Rect.zero;
+                    }
+                    else
+                    {
+                        rectParams.backgroundRepeatRect = rect;
+                    }
+
+                    rectParams.rect = totalRect;
+                }
             }
 
-            DrawRectangle(rectParams);
+            if (rectParams.vectorImage == null && backgroundRepeatInstanceList != null)
+            {
+                BackgroundRepeatInstance rect;
+                rect.rect = rectParams.rect;
+                rect.backgroundRepeatRect = rectParams.backgroundRepeatRect;
+                rect.uv = rectParams.uv;
+                backgroundRepeatInstanceList.Add(rect);
+            }
+            else
+            {
+                DrawRectangle(rectParams);
+            }
         }
 
         static void AdjustSpriteWinding(Vector2[] vertices, UInt16[] indices, NativeSlice<UInt16> newIndices)
@@ -1455,6 +1558,10 @@ namespace UnityEngine.UIElements.UIR
         UIR.MeshGenerationCallback m_OnMeshGenerationDelegate;
         void OnMeshGeneration(MeshGenerationContext ctx, object data)
         {
+            if (m_BackgroundRepeatInstanceList != null)
+            {
+                m_BackgroundRepeatInstanceList.Reset();
+            }
             m_GCHandlePool.ReturnAll();
         }
 
@@ -1555,38 +1662,133 @@ namespace UnityEngine.UIElements.UIR
             {
                 ApplyInset(ref rectParams, tex);
 
-                MeshWriteDataInterface meshData;
-                if (rectParams.texture != IntPtr.Zero)
-                    meshData = MeshBuilderNative.MakeTexturedRect(rectParams, UIRUtility.k_MeshPosZ);
-                else
-                    meshData = MeshBuilderNative.MakeSolidRect(rectParams, UIRUtility.k_MeshPosZ);
-
-                if (meshData.vertexCount == 0 || meshData.indexCount == 0)
-                    return;
-
-                var meshFlags = (MeshGenerationContext.MeshFlags)rectParams.meshFlags;
-
-                NativeSlice<Vertex> nativeVertices;
-                NativeSlice<UInt16> nativeIndices;
-                unsafe
+                if (rectParams.backgroundRepeatInstanceList != IntPtr.Zero)
                 {
-                    nativeVertices = UIRenderDevice.PtrToSlice<Vertex>((void*)meshData.vertices, meshData.vertexCount);
-                    nativeIndices = UIRenderDevice.PtrToSlice<UInt16>((void*)meshData.indices, meshData.indexCount);
+                    GCHandle handle = (GCHandle)rectParams.backgroundRepeatInstanceList;
+                    NativePagedList<BackgroundRepeatInstance> list = (handle.Target as NativePagedList<BackgroundRepeatInstance>);
+
+                    int rectCount = rectParams.backgroundRepeatInstanceListEndIndex - rectParams.backgroundRepeatInstanceListStartIndex;
+
+                    // In the best case, we suppose we will have all simple quads (2 triangles) after the tessellation.
+                    int freeVertices = Math.Min(4 * rectCount, (int)UIRenderDevice.maxVerticesPerPage);
+                    int freeIndices = Math.Min(6 * rectCount, (int)UIRenderDevice.maxVerticesPerPage * 3);
+                    int nextVerticesAllocSize = freeVertices;
+                    int nextIndicesAllocSize = freeIndices;
+
+                    allocator.AllocateTempMesh(nextVerticesAllocSize, nextIndicesAllocSize, out var vertices, out var indices);
+
+                    NativePagedList<BackgroundRepeatInstance>.Enumerator enumerator = new(list, rectParams.backgroundRepeatInstanceListStartIndex);
+
+                    for (int i = 0; i < rectCount; ++i)
+                    {
+                        MeshWriteDataInterface meshData;
+
+                        Debug.Assert(enumerator.HasNext());
+
+                        BackgroundRepeatInstance rect = enumerator.GetNext();
+                        rectParams.rect = rect.rect;
+                        rectParams.backgroundRepeatRect = rect.backgroundRepeatRect;
+                        rectParams.uv = rect.uv;
+
+                        if (rectParams.texture != IntPtr.Zero)
+                            meshData = MeshBuilderNative.MakeTexturedRect(rectParams, UIRUtility.k_MeshPosZ);
+                        else
+                            meshData = MeshBuilderNative.MakeSolidRect(rectParams, UIRUtility.k_MeshPosZ);
+
+                        if (meshData.vertexCount == 0 || meshData.indexCount == 0)
+                            continue;
+
+                        NativeSlice<Vertex> nativeVertices;
+                        NativeSlice<UInt16> nativeIndices;
+                        unsafe
+                        {
+                            nativeVertices = UIRenderDevice.PtrToSlice<Vertex>((void*)meshData.vertices, meshData.vertexCount);
+                            nativeIndices = UIRenderDevice.PtrToSlice<UInt16>((void*)meshData.indices, meshData.indexCount);
+                        }
+
+                        // If we do not have enough freeVertex and freeIndices, we must draw what we have
+                        // accumulated and allocation a new mesh with twice the size.
+                        if (freeVertices < meshData.vertexCount || freeIndices < meshData.indexCount)
+                        {
+                            if ((vertices.Length - freeVertices) > 0 && (indices.Length - freeIndices) > 0)
+                            {
+                                node.DrawMesh(
+                                    vertices.Slice(0, vertices.Length - freeVertices),
+                                    indices.Slice(0, indices.Length - freeIndices),
+                                    tex);
+                            }
+
+                            nextVerticesAllocSize = Math.Min(Math.Max(meshData.vertexCount, nextVerticesAllocSize) * 2, (int)UIRenderDevice.maxVerticesPerPage);
+                            nextIndicesAllocSize = Math.Min(Math.Max(meshData.indexCount, nextIndicesAllocSize) * 2, (int)UIRenderDevice.maxVerticesPerPage * 3);
+
+                            allocator.AllocateTempMesh(nextVerticesAllocSize, nextIndicesAllocSize, out vertices, out indices);
+
+                            freeVertices = nextVerticesAllocSize;
+                            freeIndices = nextIndicesAllocSize;
+                        }
+
+                        // Accumulate the new mesh in the existing allocation.
+                        int start = vertices.Length - freeVertices;
+                        unsafe
+                        {
+                            void* dstv = (void*)(((Vertex*)vertices.GetUnsafePtr()) + start);
+                            int sizev = meshData.vertexCount * sizeof(Vertex);
+                            UnsafeUtility.MemCpy(dstv, nativeVertices.GetUnsafePtr(), sizev);
+                        }
+
+                        // Make sure we offset the indices to correctly draw the new mesh.
+                        ushort offset = (ushort)start;
+                        start = indices.Length - freeIndices;
+                        for (int j = 0; j < meshData.indexCount; ++j)
+                        {
+                            indices[start + j] = (ushort)(nativeIndices[j] + offset);
+                        }
+
+                        freeVertices -= meshData.vertexCount;
+                        freeIndices -= meshData.indexCount;
+                    }
+
+                    if ((vertices.Length - freeVertices) > 0 && (indices.Length - freeIndices) > 0)
+                    {
+                        node.DrawMesh(
+                           vertices.Slice(0, vertices.Length - freeVertices),
+                            indices.Slice(0, indices.Length - freeIndices),
+                            tex);
+                    }
                 }
-                if (nativeVertices.Length == 0 || nativeIndices.Length == 0)
-                    return;
+                else
+                {
+                    MeshWriteDataInterface meshData;
+                    if (rectParams.texture != IntPtr.Zero)
+                        meshData = MeshBuilderNative.MakeTexturedRect(rectParams, UIRUtility.k_MeshPosZ);
+                    else
+                        meshData = MeshBuilderNative.MakeSolidRect(rectParams, UIRUtility.k_MeshPosZ);
 
-                allocator.AllocateTempMesh(nativeVertices.Length, nativeIndices.Length, out var vertices, out var indices);
+                    if (meshData.vertexCount == 0 || meshData.indexCount == 0)
+                        return;
 
-                Debug.Assert(vertices.Length == nativeVertices.Length);
-                Debug.Assert(indices.Length == nativeIndices.Length);
-                vertices.CopyFrom(nativeVertices);
-                indices.CopyFrom(nativeIndices);
+                    NativeSlice<Vertex> nativeVertices;
+                    NativeSlice<UInt16> nativeIndices;
+                    unsafe
+                    {
+                        nativeVertices = UIRenderDevice.PtrToSlice<Vertex>((void*)meshData.vertices, meshData.vertexCount);
+                        nativeIndices = UIRenderDevice.PtrToSlice<UInt16>((void*)meshData.indices, meshData.indexCount);
+                    }
+                    if (nativeVertices.Length == 0 || nativeIndices.Length == 0)
+                        return;
 
-                node.DrawMesh(vertices, indices, tex);
-            }
+                    allocator.AllocateTempMesh(nativeVertices.Length, nativeIndices.Length, out var vertices, out var indices);
 
-            void DrawSprite(UnsafeMeshGenerationNode node, ref MeshBuilderNative.NativeRectParams rectParams, Sprite sprite)
+                    Debug.Assert(vertices.Length == nativeVertices.Length);
+                    Debug.Assert(indices.Length == nativeIndices.Length);
+                    vertices.CopyFrom(nativeVertices);
+                    indices.CopyFrom(nativeIndices);
+
+                    node.DrawMesh(vertices, indices, tex);
+                }
+}
+
+void DrawSprite(UnsafeMeshGenerationNode node, ref MeshBuilderNative.NativeRectParams rectParams, Sprite sprite)
             {
                 if (rectParams.spriteTexture == IntPtr.Zero)
                     return; // Textureless sprites not supported, should use VectorImage instead
@@ -1712,6 +1914,10 @@ namespace UnityEngine.UIElements.UIR
 
             if (disposing)
             {
+                if (m_BackgroundRepeatInstanceList != null)
+                {
+                    m_BackgroundRepeatInstanceList.Dispose();
+                }
                 m_GCHandlePool.Dispose();
                 m_JobParameters.Dispose();
             }

@@ -293,6 +293,8 @@ namespace UnityEditor.Overlays
 
         [SerializeField]
         bool m_OverlaysVisible = true;
+        
+        bool m_OverlaysSupportEnabled = true;
 
         VisualElement m_RootVisualElement;
         internal EditorWindow containerWindow { get; set; }
@@ -328,24 +330,68 @@ namespace UnityEditor.Overlays
 
         internal Action afterOverlaysInitialized;
         internal event Action<bool> overlaysEnabledChanged;
+        internal event Action<bool> overlaysSupportEnabledChanged;
 
         internal event Action overlayListChanged;
 
         public bool overlaysEnabled
         {
-            get => m_Containers.All(x => x.style.display != DisplayStyle.None);
+            get => m_Containers != null && m_OverlaysVisible;
 
             set
             {
-                m_OverlaysVisible = value;
+                var changed = m_OverlaysVisible != value;
+                if (changed)
+                    m_OverlaysVisible = value;
 
-                if (value == overlaysEnabled)
-                    return;
-
+                // Ensure the containers' state refreshes in case m_OverlaysVisible value is somehow desynced from container state
+                var allContainersMatchEnabledState = true;
                 foreach (var container in m_Containers)
-                    container.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+                {
+                    if (container.style.display != (value ? DisplayStyle.Flex : DisplayStyle.None))
+                    {
+                        allContainersMatchEnabledState = false;
+                        break;
+                    }
+                }
+                if (!allContainersMatchEnabledState)
+                {
+                    foreach (var container in m_Containers)
+                        container.style.display = value ? DisplayStyle.Flex : DisplayStyle.None;
+                }
 
-                overlaysEnabledChanged?.Invoke(value);
+                if (changed)
+                    overlaysEnabledChanged?.Invoke(m_OverlaysVisible);
+            }
+        }
+
+        internal bool overlaysSupportEnabled
+        {
+            get => m_OverlaysSupportEnabled;
+
+            set
+            {
+                if (value != m_OverlaysSupportEnabled)
+                {
+                    m_OverlaysSupportEnabled = value;
+
+                    if (!m_OverlaysSupportEnabled)
+                    {
+                        // Ensure no lingering popup is left open
+                        ClosePopupOverlay();
+                        // Hide all overlay containers
+                        foreach (var container in m_Containers)
+                            container.style.display = DisplayStyle.None;
+                    }
+                    // Unhide overlay containers if they're enabled when reactivating support
+                    else if (overlaysEnabled)
+                    {
+                        foreach (var container in m_Containers)
+                            container.style.display = DisplayStyle.Flex;
+                    }
+
+                    overlaysSupportEnabledChanged?.Invoke(value);
+                }
             }
         }
 
@@ -515,7 +561,7 @@ namespace UnityEditor.Overlays
         // clamp all overlays to  root visual element's new bounds
         void GeometryChanged(GeometryChangedEvent evt)
         {
-            if (!overlaysEnabled)
+            if (!overlaysEnabled || !overlaysSupportEnabled)
                 return;
 
             foreach (var overlay in m_Overlays)
@@ -731,7 +777,7 @@ namespace UnityEditor.Overlays
 
         public void ShowPopup<T>() where T : Overlay, new()
         {
-            if (ClosePopupOverlay())
+            if (ClosePopupOverlay() || !overlaysSupportEnabled)
                 return;
 
             var popup = OverlayPopup.CreateAtCanvasCenter(this, CreateOverlayForPopup<T>());
@@ -746,12 +792,15 @@ namespace UnityEditor.Overlays
                 return;
             }
 
+            if (!overlaysSupportEnabled)
+                return;
+
             ShowPopup<T>(PointerDeviceState.GetPointerPosition(PointerId.mousePointerId, ContextType.Editor));
         }
 
         public void ShowPopup<T>(Vector2 position) where T : Overlay, new()
         {
-            if (ClosePopupOverlay())
+            if (ClosePopupOverlay() || !overlaysSupportEnabled)
                 return;
 
             var popup = OverlayPopup.CreateAtPosition(this, CreateOverlayForPopup<T>(), position);
@@ -917,12 +966,13 @@ namespace UnityEditor.Overlays
 
             if (attrib.defaultDockPosition == DockPosition.Top)
             {
-                var index = Mathf.Min(attrib.defaultDockIndex, container.GetSectionCount(OverlayContainerSection.BeforeSpacer));
+                var index = Mathf.Min(attrib.defaultDockIndex, container.GetSectionCount(OverlayContainerSection.BeforeSpacer) - (container.ContainsOverlay(overlay, OverlayContainerSection.BeforeSpacer) ? 1 : 0));
+
                 overlay.DockAt(container, OverlayContainerSection.BeforeSpacer, index);
             }
             else if (attrib.defaultDockPosition == DockPosition.Bottom)
             {
-                var index = Mathf.Min(attrib.defaultDockIndex, container.GetSectionCount(OverlayContainerSection.AfterSpacer));
+                var index = Mathf.Min(attrib.defaultDockIndex, container.GetSectionCount(OverlayContainerSection.AfterSpacer) - (container.ContainsOverlay(overlay, OverlayContainerSection.AfterSpacer) ? 1 : 0));
                 overlay.DockAt(container, OverlayContainerSection.AfterSpacer, index);
             }
             else
@@ -964,12 +1014,14 @@ namespace UnityEditor.Overlays
             if(container == null)
                 container = overlay is ToolbarOverlay ? defaultToolbarContainer : defaultContainer;
 
+
+
             // Overlays are sorted by their index in containers so we can directly add them to top or bottom without
             // thinking of order
             if (data.dockPosition == DockPosition.Top || container is FloatingOverlayContainer)
-                overlay.DockAt(container, OverlayContainerSection.BeforeSpacer, container.GetSectionCount(OverlayContainerSection.BeforeSpacer));
+                overlay.DockAt(container, OverlayContainerSection.BeforeSpacer);
             else if (data.dockPosition == DockPosition.Bottom)
-                overlay.DockAt(container, OverlayContainerSection.AfterSpacer, container.GetSectionCount(OverlayContainerSection.AfterSpacer));
+                overlay.DockAt(container, OverlayContainerSection.AfterSpacer);
             else
                 throw new Exception("data.dockPosition is not Top or Bottom, did someone add a new one?");
 

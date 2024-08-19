@@ -14,11 +14,6 @@ namespace UnityEngine.TextCore.Text
     [NativeHeader("Modules/TextCoreTextEngine/Native/TextInfo.h")]
     internal struct NativeTextInfo
     {
-        public NativeTextElementInfo[] textElementInfos;
-        public int[] fontAssetIds;
-        public int[] fontAssetLastGlyphIndex;
-
-        [Ignore] // This field must be populated on the managed side
-        public FontAsset[] fontAssets;
+        public ATGMeshInfo[] meshInfos;
     }
 }

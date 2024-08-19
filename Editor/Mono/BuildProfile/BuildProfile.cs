@@ -19,6 +19,7 @@ namespace UnityEditor.Build.Profile
     [StructLayout(LayoutKind.Sequential)]
     [ExcludeFromObjectFactory]
     [ExcludeFromPreset]
+    [HelpURL("build-profiles-reference")]
     public sealed partial class BuildProfile : ScriptableObject
     {
         /// <summary>
@@ -127,6 +128,9 @@ namespace UnityEditor.Build.Profile
             set { m_PlayerSettings = value; }
         }
 
+        [VisibleToOtherModules]
+        internal Action OnPlayerSettingsUpdatedFromYAML;
+
         // TODO: Return server IBuildTargets for server build profiles. (https://jira.unity3d.com/browse/PLAT-6612)
         /// <summary>
         /// Get the IBuildTarget of the build profile.
@@ -202,14 +206,10 @@ namespace UnityEditor.Build.Profile
 
         void OnDisable()
         {
-            RemovePlayerSettings();
-
-            // Active profile YAML may be read from disk during startup or
-            // Asset Database refresh, flush pending changes to disk.
-            if (BuildProfileContext.instance.activeProfile != this)
-                return;
-
-            AssetDatabase.SaveAssetIfDirty(this);
+            // OnDisable is called when entering play mode, during domain reloads, or when the object is destroyed.
+            // Avoid removing player settings for the first two cases to prevent slow syncs (e.g., color space) caused by global manager updates.
+            if (!EditorApplication.isUpdating)
+                RemovePlayerSettings();
         }
 
         [MenuItem("CONTEXT/BuildProfile/Reset", false)]
@@ -228,7 +228,7 @@ namespace UnityEditor.Build.Profile
 
             AssetDatabase.SaveAssetIfDirty(targetBuildProfile);
         }
-        
+
         void ValidateDataConsistency()
         {
             // TODO: Remove migration code (https://jira.unity3d.com/browse/PLAT-8909)
@@ -279,7 +279,10 @@ namespace UnityEditor.Build.Profile
                     scene.path = AssetDatabase.GUIDToAssetPath(scene.guid);
                 }
 
-                if (string.IsNullOrEmpty(scene.path))
+
+                // Asset may have been deleted.
+                // AssetDatabase may cache GUID to/from path mapping.
+                if (string.IsNullOrEmpty(scene.path) || !AssetDatabase.AssetPathExists(scene.path))
                 {
                     // Scene Object may have been deleted from disk.
                     RemoveAt(i);
@@ -288,11 +291,6 @@ namespace UnityEditor.Build.Profile
 
                 if (!isGuidValid)
                     scene.guid = AssetDatabase.GUIDFromAssetPath(scene.path);
-
-                // Asset may have been deleted. AssetDatabase may cache GUID to/from
-                // path mapping.
-                if (AssetDatabase.GetMainAssetTypeFromGUID(scene.guid) is null)
-                    RemoveAt(i);
             }
 
             if (length == m_Scenes.Length)

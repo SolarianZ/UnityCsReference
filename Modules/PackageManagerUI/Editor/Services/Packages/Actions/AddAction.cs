@@ -28,7 +28,8 @@ internal class AddAction : PackageAction
     protected override bool TriggerActionImplementation(IList<IPackage> packages)
     {
         var primaryVersions = packages.Select(p => p.versions.primary).ToArray();
-        m_OperationDispatcher.Install(primaryVersions);
+        if(!m_OperationDispatcher.Install(primaryVersions))
+            return false;
         // The current multi-select UI does not allow users to install non-recommended versions
         // Should this change in the future, we'll need to update the analytics event accordingly.
         PackageManagerWindowAnalytics.SendEvent("installNewRecommended", primaryVersions);
@@ -44,7 +45,7 @@ internal class AddAction : PackageAction
             if (customizedDependencies.Any())
             {
                 var packageNameAndVersions = string.Join("\n\u2022 ",
-                    customizedDependencies.Select(package => $"{package.displayName} - {package.versions.lifecycleVersion.version}").ToArray());
+                    customizedDependencies.Select(package => $"{package.displayName} - {package.versions.recommended.version}").ToArray());
 
                 var title = string.Format(L10n.Tr("Installing {0}"), version.GetDescriptor());
                 var message = customizedDependencies.Length == 1 ?
@@ -76,7 +77,8 @@ internal class AddAction : PackageAction
             if (version.package.isDeprecated && !m_Application.DisplayDialog("installDeprecatedPackage", L10n.Tr("Deprecated package installation"), L10n.Tr("Are you sure you want to install this deprecated package?"), L10n.Tr("Install"), L10n.Tr("Cancel")))
                 return false;
 
-            m_OperationDispatcher.Install(version);
+            if (!m_OperationDispatcher.Install(version))
+                return false;
 
             PackageManagerWindowAnalytics.SendEvent(eventName, version);
         }

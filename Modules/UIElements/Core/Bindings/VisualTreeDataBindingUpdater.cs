@@ -18,8 +18,6 @@ namespace UnityEngine.UIElements
 
     class VisualTreeDataBindingsUpdater : BaseVisualTreeHierarchyTrackerUpdater
     {
-        public long frame { get; private set; }
-
         readonly struct VersionInfo
         {
             public readonly object source;
@@ -138,7 +136,6 @@ namespace UnityEngine.UIElements
 
         public override void Update()
         {
-            ++frame;
             base.Update();
 
             ProcessAllBindingRequests();
@@ -269,7 +266,7 @@ namespace UnityEngine.UIElements
             {
                 // If the data source is not versioned, we touch the version every update to keep it "fresh"
                 if (source is not IDataSourceViewHashProvider versioned)
-                    return (true, version + 1);
+                    return (null != source, version + 1);
 
                 var currentVersion = versioned.GetViewHashCode();
 
@@ -281,7 +278,7 @@ namespace UnityEngine.UIElements
                 return (true, versioned.GetViewHashCode());
             }
 
-            return (true, 0L);
+            return (null != source, 0L);
         }
 
         private bool IsPrefix(in PropertyPath prefix, in PropertyPath path)

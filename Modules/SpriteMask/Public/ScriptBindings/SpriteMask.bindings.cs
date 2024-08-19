@@ -2,11 +2,8 @@
 // Copyright (c) Unity Technologies. For terms of use, see
 // https://unity3d.com/legal/licenses/Unity_Reference_Only_License
 
-using System;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using UnityEngine.Bindings;
-using UnityEngine.Scripting;
+using UnityEngine.Rendering;
 
 namespace UnityEngine
 {
@@ -39,9 +36,8 @@ namespace UnityEngine
 
     [NativeHeader("Modules/SpriteMask/Public/ScriptBindings/SpriteMask.bindings.h")]
     [StaticAccessor("SpriteUtilityBindings", StaticAccessorType.DoubleColon)]
-    public static class SpriteMaskUtility
+    internal static class SpriteMaskUtility
     {
-        extern public static bool HasSpriteMaskInScene();
+        extern internal static bool HasSpriteMaskInLayerRange(SortingLayerRange range);
     }
-
 }

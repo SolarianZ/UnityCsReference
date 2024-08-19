@@ -1623,6 +1623,12 @@
     <Compile Include="..\..\Editor\Mono\GradientPreviewCache.bindings.cs">
       <Link>Editor\Mono\GradientPreviewCache.bindings.cs</Link>
     </Compile>
+    <Compile Include="..\..\Editor\Mono\Graphics\Analytics\GraphicsToolLifetimeAnalytic.cs">
+      <Link>Editor\Mono\Graphics\Analytics\GraphicsToolLifetimeAnalytic.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Editor\Mono\Graphics\Analytics\GraphicsToolUsageAnalytic.cs">
+      <Link>Editor\Mono\Graphics\Analytics\GraphicsToolUsageAnalytic.cs</Link>
+    </Compile>
     <Compile Include="..\..\Editor\Mono\Graphics\EditorMaterialUtility.bindings.cs">
       <Link>Editor\Mono\Graphics\EditorMaterialUtility.bindings.cs</Link>
     </Compile>
@@ -4701,6 +4707,9 @@
     <Compile Include="..\..\Modules\EditorToolbar\ToolbarElements\UndoButton.cs">
       <Link>Modules\EditorToolbar\ToolbarElements\UndoButton.cs</Link>
     </Compile>
+    <Compile Include="..\..\Modules\EmbreeEditor\Embree.bindings.cs">
+      <Link>Modules\EmbreeEditor\Embree.bindings.cs</Link>
+    </Compile>
     <Compile Include="..\..\Modules\GenericRemoteEditor\Public\GenericRemote.bindings.cs">
       <Link>Modules\GenericRemoteEditor\Public\GenericRemote.bindings.cs</Link>
     </Compile>
@@ -5640,6 +5649,9 @@
     <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\Common\Alert.cs">
       <Link>Modules\PackageManagerUI\Editor\UI\Common\Alert.cs</Link>
     </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\Common\BaseDropdownButton.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\Common\BaseDropdownButton.cs</Link>
+    </Compile>
     <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\Common\DropdownButton.cs">
       <Link>Modules\PackageManagerUI\Editor\UI\Common\DropdownButton.cs</Link>
     </Compile>
@@ -5832,6 +5844,30 @@
     <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageGroup.cs">
       <Link>Modules\PackageManagerUI\Editor\UI\PackageGroup.cs</Link>
     </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageHelpBox\DeprecatedPackageHelpBox.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\PackageHelpBox\DeprecatedPackageHelpBox.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageHelpBox\DeprecatedVersionHelpBox.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\PackageHelpBox\DeprecatedVersionHelpBox.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageHelpBox\DisabledPackageHelpBox.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\PackageHelpBox\DisabledPackageHelpBox.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageHelpBox\HiddenProductHelpBox.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\PackageHelpBox\HiddenProductHelpBox.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageHelpBox\PackageBaseHelpBox.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\PackageHelpBox\PackageBaseHelpBox.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageHelpBox\PackageHelpBoxWithReadMore.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\PackageHelpBox\PackageHelpBoxWithReadMore.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageHelpBox\ScopedRegistryHelpBox.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\PackageHelpBox\ScopedRegistryHelpBox.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageHelpBox\VersionTagHelpBox.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\PackageHelpBox\VersionTagHelpBox.cs</Link>
+    </Compile>
     <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\PackageItem.cs">
       <Link>Modules\PackageManagerUI\Editor\UI\PackageItem.cs</Link>
     </Compile>
@@ -5955,14 +5991,17 @@
     <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\SignInBar.cs">
       <Link>Modules\PackageManagerUI\Editor\UI\SignInBar.cs</Link>
     </Compile>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\ToolBar\Interfaces\IPackageToolBarButton.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\ToolBar\Interfaces\IPackageToolBarButton.cs</Link>
+    </Compile>
     <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\ToolBar\LegacyFormatDropdownButton.cs">
       <Link>Modules\PackageManagerUI\Editor\UI\ToolBar\LegacyFormatDropdownButton.cs</Link>
     </Compile>
     <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\ToolBar\PackageToolBar.cs">
       <Link>Modules\PackageManagerUI\Editor\UI\ToolBar\PackageToolBar.cs</Link>
     </Compile>
-    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\ToolBar\PackageToolBarButton.cs">
-      <Link>Modules\PackageManagerUI\Editor\UI\ToolBar\PackageToolBarButton.cs</Link>
+    <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\ToolBar\PackageToolBarButtonSingleAction.cs">
+      <Link>Modules\PackageManagerUI\Editor\UI\ToolBar\PackageToolBarButtonSingleAction.cs</Link>
     </Compile>
     <Compile Include="..\..\Modules\PackageManagerUI\Editor\UI\ToolBar\PackageToolBarError.cs">
       <Link>Modules\PackageManagerUI\Editor\UI\ToolBar\PackageToolBarError.cs</Link>
@@ -6132,6 +6171,9 @@
     <Compile Include="..\..\Modules\PackageManager\Editor\Managed\Requests\UpdateScopedRegistryRequest.cs">
       <Link>Modules\PackageManager\Editor\Managed\Requests\UpdateScopedRegistryRequest.cs</Link>
     </Compile>
+    <Compile Include="..\..\Modules\PackageManager\Editor\Managed\ResolutionStrategy.cs">
+      <Link>Modules\PackageManager\Editor\Managed\ResolutionStrategy.cs</Link>
+    </Compile>
     <Compile Include="..\..\Modules\PackageManager\Editor\Managed\Search\SearchCapabilities.cs">
       <Link>Modules\PackageManager\Editor\Managed\Search\SearchCapabilities.cs</Link>
     </Compile>
@@ -6152,6 +6194,9 @@
     </Compile>
     <Compile Include="..\..\Modules\PackageManager\Editor\Managed\Search\SearchResults.cs">
       <Link>Modules\PackageManager\Editor\Managed\Search\SearchResults.cs</Link>
+    </Compile>
+    <Compile Include="..\..\Modules\PackageManager\Editor\Managed\SemVersionHelper.cs">
+      <Link>Modules\PackageManager\Editor\Managed\SemVersionHelper.cs</Link>
     </Compile>
     <Compile Include="..\..\Modules\PackageManager\Editor\Managed\SignatureInfo.cs">
       <Link>Modules\PackageManager\Editor\Managed\SignatureInfo.cs</Link>
@@ -8364,6 +8409,9 @@
     <Compile Include="..\..\Modules\UIBuilder\Editor\Builder\Inspector\BuilderInspectorWindow.cs">
       <Link>Modules\UIBuilder\Editor\Builder\Inspector\BuilderInspectorWindow.cs</Link>
     </Compile>
+    <Compile Include="..\..\Modules\UIBuilder\Editor\Builder\Inspector\BuilderNewClassWindow.cs">
+      <Link>Modules\UIBuilder\Editor\Builder\Inspector\BuilderNewClassWindow.cs</Link>
+    </Compile>
     <Compile Include="..\..\Modules\UIBuilder\Editor\Builder\Inspector\BuilderStyleRow.cs">
       <Link>Modules\UIBuilder\Editor\Builder\Inspector\BuilderStyleRow.cs</Link>
     </Compile>
@@ -9480,7 +9528,7 @@
     <Compile Include="..\..\Modules\XREditor\XRManagementInstaller.cs">
       <Link>Modules\XREditor\XRManagementInstaller.cs</Link>
     </Compile>
-    <Reference Include="../../artifacts/Stevedore/unity-compiler-win-x64_1da2/Unity.CompilationPipeline.Common/Unity.CompilationPipeline.Common.dll" />
+    <Reference Include="../../artifacts/Stevedore/unity-compiler-win-x64_8048/Unity.CompilationPipeline.Common/Unity.CompilationPipeline.Common.dll" />
     <Reference Include="../../External/Unity.Cecil/builds/lib/net40/Unity.Cecil.dll" />
     <Reference Include="../../External/ExCSS/builds/builds/lib/net35/ExCSS.Unity.dll" />
     <Reference Include="../../Tools/Bee/build/Distribution/BeeDriver2/Bee.BeeDriver2.dll" />

@@ -38,6 +38,8 @@ namespace UnityEditor.Build.Profile
         BuildProfile m_Profile;
         SerializedObject m_ProfileSerializedObject;
 
+        bool m_PlayerSettingsYamlUpdated = false;
+
         internal static BuildProfilePlayerSettingsEditor CreatePlayerSettingsUI(VisualElement root, SerializedObject buildProfileSerializedObject)
         {
             var buildProfilePlayerSettingsEditor = new BuildProfilePlayerSettingsEditor();
@@ -66,10 +68,16 @@ namespace UnityEditor.Build.Profile
 
         internal void EditorUpdate()
         {
-            if (m_PlayerSettingsEditor != null && m_Profile.playerSettings == null)
+            if (m_PlayerSettingsYamlUpdated)
             {
                 RemovePlayerSettingsInspector();
-                ShowPlayerSettingsHelpBox();
+
+                if (m_Profile.playerSettings == null)
+                    ShowPlayerSettingsHelpBox();
+                else
+                    ShowPlayerSettingsEditor();
+
+                m_PlayerSettingsYamlUpdated = false;
             }
         }
 
@@ -99,7 +107,9 @@ namespace UnityEditor.Build.Profile
         {
             m_PlayerSettingsHelpBox.Hide();
 
-            if (m_Profile.playerSettings == null)
+            bool createPlayerSettings = m_Profile.playerSettings == null;
+
+            if (createPlayerSettings)
             {
                 BuildProfileModuleUtil.CreatePlayerSettingsFromGlobal(m_Profile);
                 UpdateBuildProfile();
@@ -107,9 +117,15 @@ namespace UnityEditor.Build.Profile
 
             CreatePlayerSettingsInspector();
 
+            if (createPlayerSettings && m_PlayerSettingsEditor.CopyProjectSettingsToPlayerSettingsExtension())
+                UpdateBuildProfile();
+
             m_PlayerSettingsOptions.clicked += PlayerSettingsOptionMenu;
             m_PlayerSettingsOptions.Show();
             m_PlayerSettingsFoldout.Show();
+
+            m_Profile.OnPlayerSettingsUpdatedFromYAML -= OnPlayerSettingsUpdatedFromYAML;
+            m_Profile.OnPlayerSettingsUpdatedFromYAML += OnPlayerSettingsUpdatedFromYAML;
         }
 
         void HidePlayerSettingsEditor()
@@ -124,7 +140,7 @@ namespace UnityEditor.Build.Profile
             {
                 var isActiveProfile = BuildProfile.GetActiveBuildProfile() == m_Profile;
                 m_PlayerSettingsEditor = Editor.CreateEditor(m_Profile.playerSettings) as PlayerSettingsEditor;
-                m_PlayerSettingsEditor.ConfigurePlayerSettingsForBuildProfile(m_Profile.moduleName, m_Profile.subtarget == StandaloneBuildSubtarget.Server, isActiveProfile);
+                m_PlayerSettingsEditor.ConfigurePlayerSettingsForBuildProfile(m_ProfileSerializedObject, m_Profile.moduleName, m_Profile.subtarget == StandaloneBuildSubtarget.Server, isActiveProfile);
             }
 
             if (m_PlayerSettingsInspector == null)
@@ -154,6 +170,11 @@ namespace UnityEditor.Build.Profile
             UpdateBuildProfile();
         }
 
+        void OnPlayerSettingsUpdatedFromYAML()
+        {
+            m_PlayerSettingsYamlUpdated = true;
+        }
+
         void ShowPlayerSettingsHelpBox()
         {
             m_PlayerSettingsFoldout.Hide();
@@ -169,6 +190,7 @@ namespace UnityEditor.Build.Profile
         void PlayerSettingsOptionMenu()
         {
             bool isDataSameAsProjSettings = BuildProfileModuleUtil.IsDataEqualToProjectSettings(m_Profile.playerSettings);
+            isDataSameAsProjSettings = isDataSameAsProjSettings && m_PlayerSettingsEditor.IsPlayerSettingsExtensionDataEqualToProjectSettings();
             var menu = new GenericMenu();
             menu.AddItem(TrText.playerSetttingsRemove, false, RemovePlayerSettings);
             menu.AddItem(TrText.playerSettingsReset, false, isDataSameAsProjSettings ? null : ResetToProjectSettingsValues);
@@ -191,7 +213,6 @@ namespace UnityEditor.Build.Profile
             HidePlayerSettingsEditor();
             BuildProfileModuleUtil.RemovePlayerSettings(m_Profile);
             UpdateBuildProfile();
-            ShowPlayerSettingsHelpBox();
             CheckPropertiesThatRequireRecompilation(targetName, customScriptingDefines, customAdditionalCompilerArguments);
         }
 
@@ -212,6 +233,7 @@ namespace UnityEditor.Build.Profile
             var playerSettings = AssetDatabase.LoadAssetAtPath<PlayerSettings>(k_ProjectSettingsPath);
             var preset = new Preset(playerSettings);
             preset.ApplyTo(m_Profile.playerSettings);
+            m_PlayerSettingsEditor.CopyProjectSettingsToPlayerSettingsExtension();
 
             UpdateBuildProfile();
 
@@ -238,7 +260,6 @@ namespace UnityEditor.Build.Profile
             BuildProfileModuleUtil.SerializePlayerSettings(m_Profile);
             m_ProfileSerializedObject.ApplyModifiedProperties();
             EditorUtility.SetDirty(m_Profile);
-            AssetDatabase.SaveAssetIfDirty(m_Profile);
         }
     }
 }

@@ -2225,6 +2225,25 @@ namespace UnityEngine
         Edges = 3,
     }
 
+    // The method used to combine both material values.
+    public enum PhysicsMaterialCombine2D
+    {
+        // The average of both material values.
+        Average = 0,
+
+        // The geometric mean of both material values.
+        Mean,
+
+        // The product of both material values.
+        Multiply,
+
+        // The minium of both material values.
+        Minimum,
+
+        // The maximum of both material values.
+        Maximum
+    }
+
     #endregion
 
     #region Structures
@@ -3004,6 +3023,12 @@ namespace UnityEngine
         [NativeName("relativeVelocity")]
         private Vector2 m_RelativeVelocity;
 
+        [NativeName("friction")]
+        private float m_Friction;
+
+        [NativeName("bounciness")]
+        private float m_Bounciness;
+
         [NativeName("separation")]
         private float m_Separation;
 
@@ -3045,6 +3070,12 @@ namespace UnityEngine
 
         // The relative velocity between the two colliders at the contact point.
         public Vector2 relativeVelocity { get { return m_RelativeVelocity; } }
+
+        // The effective friction used here (post PhysicsMaterial2D combination).
+        public float friction { get { return m_Friction; } }
+
+        // The effective bounciness used here (post PhysicsMaterial2D combination).
+        public float bounciness { get { return m_Bounciness; } }        
 
         // The first collider in contact.
         public Collider2D collider { get { return Object.FindObjectFromInstanceID(m_Collider) as Collider2D; } }
@@ -3421,13 +3452,13 @@ namespace UnityEngine
         extern private SlideResults Slide_Internal(Vector2 velocity, float deltaTime, SlideMovement slideMovement);
 
         // The linear velocity vector of the object.
-        extern public Vector2 velocity { get; set; }
+        extern public Vector2 linearVelocity { get; set; }
 
         // The linear velocity X-component vector of the object.
-        extern public float velocityX { get; set; }
+        extern public float linearVelocityX { get; set; }
 
         // The linear velocity Y-component vector of the object.
-        extern public float velocityY { get; set; }
+        extern public float linearVelocityY { get; set; }
 
         // The angular velocity vector of the object in degrees/sec.
         extern public float angularVelocity { get; set; }
@@ -3451,11 +3482,11 @@ namespace UnityEngine
         // The rotational inertia of the rigidbody about the local origin in kg-m^2 (read-only).
         extern public float inertia { get; set; }
 
-        // The (linear) drag of the object.
-        extern public float drag { get; set; }
+        // The linear damping of the object.
+        extern public float linearDamping { get; set; }
 
-        // The angular drag of the object.
-        extern public float angularDrag { get; set; }
+        // The angular damping of the object.
+        extern public float angularDamping { get; set; }
 
         // Controls the effect of gravity on the object.
         extern public float gravityScale { get; set; }
@@ -3473,11 +3504,7 @@ namespace UnityEngine
 
         // Should kinematic/kinematic and kinematic/static contacts be allowed?
         extern public bool useFullKinematicContacts { get; set; }
-
-        // This property is obsolete but will be deprecated at a later date as it's commonly used.
-        // The end-user should use bodyType instead.
-        public bool isKinematic { get { return bodyType == RigidbodyType2D.Kinematic; } set { bodyType = value ? RigidbodyType2D.Kinematic : RigidbodyType2D.Dynamic; } }
-        
+       
         // Controls whether physics will change the rotation of the object.
         extern public bool freezeRotation { get; set; }
 
@@ -3956,6 +3983,12 @@ namespace UnityEngine
 
         // Gets the effective bounciness used by the collider.
         extern public float bounciness { get; }
+
+        // Gets the method used to combine both material friction values.
+        extern public PhysicsMaterialCombine2D frictionCombine { get; }
+
+        // Gets the method used to combine both material bounce values.
+        extern public PhysicsMaterialCombine2D bounceCombine { get; }
 
         // Get whether this collider is currently touching a specific collider or not.
         extern public bool IsTouching([NotNull] Collider2D collider);
@@ -5096,14 +5129,23 @@ namespace UnityEngine
         // Creates a new material named /name/.
         public PhysicsMaterial2D(string name) { Create_Internal(this, name); }
 
+        // Get combined values.
+        extern static public float GetCombinedValues(float valueA, float valueB, PhysicsMaterialCombine2D materialCombineA, PhysicsMaterialCombine2D materialCombineB);
+
         [NativeMethod("Create_Binding")]
         extern static private void Create_Internal([Writable] PhysicsMaterial2D scriptMaterial, string name);
 
-        //  How bouncy is the surface? A value of 0 will not bounce. A value of 1 will bounce without any loss of energy.
+        // Controls how bouncy the surface contact is. A value of 0 will not bounce whereas a value of 1 will bounce without any loss of energy.
         extern public float bounciness { get; set; }
 
-        // The friction.
+        // Controls how much friction is used for the surface contact. A value of 0 is no friction whereas any higher value increases the friction.
         extern public float friction { get; set; }
+
+        // The method used to combine both material friction values.
+        extern public PhysicsMaterialCombine2D frictionCombine { get; set; }
+
+        // The method used to combine both material bounciness values.
+        extern public PhysicsMaterialCombine2D bounceCombine { get; set; }
     }
 
 #endregion

@@ -67,7 +67,7 @@ namespace UnityEditor.Search.Providers
                 {
                     if (!m_HasType)
                     {
-                        if (source.EndsWith("prefab", StringComparison.OrdinalIgnoreCase))
+                        if (source.EndsWith(".prefab", StringComparison.OrdinalIgnoreCase))
                             m_Type = AssetDatabase.GetTypeFromPathAndFileID(source, (long)gid.targetObjectId);
                         else if (flags.HasAll(SearchDocumentFlags.Nested | SearchDocumentFlags.Asset))
                         {
@@ -911,7 +911,7 @@ namespace UnityEditor.Search.Providers
         [Shortcut("Help/Search/Assets")]
         internal static void PopQuickSearch()
         {
-            SearchUtils.OpenWithProviders(type, FindProvider.providerId);
+            SearchUtils.OpenWithContextualProviders(type, FindProvider.providerId);
         }
 
         [SearchTemplate(description = "Find all textures", providerId = type)] internal static string ST1() => @"t:texture";
