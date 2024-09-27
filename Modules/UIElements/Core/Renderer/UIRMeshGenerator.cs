@@ -756,7 +756,8 @@ namespace UnityEngine.UIElements.UIR
                         indices[i],
                         false,
                         0,
-                        0);
+                        0,
+                        true);
                 }
                 else
                 {
@@ -782,7 +783,8 @@ namespace UnityEngine.UIElements.UIR
                         indices[i],
                         true,
                         sdfScale,
-                        sharpness);
+                        sharpness,
+                        false);
                 }
             }
         }
@@ -799,16 +801,16 @@ namespace UnityEngine.UIElements.UIR
                 uv = new Vector2(vertex.uv0.x, vertex.uv0.y),
                 tint = vertex.color,
                 // TODO: Don't set the flags here. The mesh conversion should perform these changes
-                flags = new Color32(0, (byte)(dilate * 255), 0, isDynamicColor ? (byte)1 : (byte)0)
+                flags = new Color32(0, (byte)(dilate * 255), 0, isDynamicColor ? (byte)UIRUtility.k_DynamicColorEnabledText : (byte)UIRUtility.k_DynamicColorDisabled)
             };
         }
 
-        void MakeText(Texture texture, NativeSlice<Vertex> vertices, NativeSlice<ushort> indices, bool isSdf, float sdfScale, float sharpness)
+        void MakeText(Texture texture, NativeSlice<Vertex> vertices, NativeSlice<ushort> indices, bool isSdf, float sdfScale, float sharpness, bool multiChannel)
         {
             if (isSdf)
                 m_MeshGenerationContext.entryRecorder.DrawSdfText(m_MeshGenerationContext.parentEntry, vertices, indices, texture, sdfScale, sharpness);
             else
-                m_MeshGenerationContext.entryRecorder.DrawMesh(m_MeshGenerationContext.parentEntry, vertices, indices, texture, true);
+                m_MeshGenerationContext.entryRecorder.DrawRasterText(m_MeshGenerationContext.parentEntry, vertices, indices, texture, multiChannel);
         }
 
         public void DrawRectangle(RectangleParams rectParams)
@@ -1208,6 +1210,7 @@ namespace UnityEngine.UIElements.UIR
 
                     d[axis] = new_size;
                     rect.size = d;
+                    targetRect = rect;
 
                     for (int i = 0; i < count; ++i)
                     {
@@ -1246,7 +1249,6 @@ namespace UnityEngine.UIElements.UIR
 
                     if ((backgroundPosition.keyword == BackgroundPositionKeyword.Right) || (backgroundPosition.keyword == BackgroundPositionKeyword.Bottom))
                     {
-
                         offset = (totalRect.size[axis] - linear_size) - offset;
                     }
                 }
@@ -1424,7 +1426,9 @@ namespace UnityEngine.UIElements.UIR
 
         void StampRectangleWithSubRect(RectangleParams rectParams, Rect targetRect, Rect totalRect, Rect targetUV, ref NativePagedList<BackgroundRepeatInstance> backgroundRepeatInstanceList)
         {
-            if (targetRect.width < UIRUtility.k_Epsilon || targetRect.height < UIRUtility.k_Epsilon)
+            const float epsilon = 0.001f;
+
+            if (targetRect.width < epsilon || targetRect.height < epsilon)
                 return;
 
             // Remap the subRect inside the targetRect
@@ -1437,7 +1441,7 @@ namespace UnityEngine.UIElements.UIR
             subRect.position += fullRect.position;
             subRect.size *= fullRect.size;
 
-            if (rectParams.HasSlices(UIRUtility.k_Epsilon))
+            if (rectParams.HasSlices(epsilon))
             {
                 // Use the full target rect when working with slices. The content will stretch to the full target.
                 rectParams.backgroundRepeatRect = Rect.zero;
@@ -1447,7 +1451,7 @@ namespace UnityEngine.UIElements.UIR
             {
                 // Find where the subRect intersects with the targetRect.
                 var rect = RectangleParams.RectIntersection(subRect, targetRect);
-                if (rect.size.x < UIRUtility.k_Epsilon || rect.size.y < UIRUtility.k_Epsilon)
+                if (rect.size.x < epsilon || rect.size.y < epsilon)
                     return;
 
                 if (rect.size != subRect.size)
@@ -1647,7 +1651,7 @@ namespace UnityEngine.UIElements.UIR
                 rectParams.rect = rect;
 
                 var uv = rectParams.uv;
-                if (tex != null && uv.width > UIRUtility.k_Epsilon && uv.height > UIRUtility.k_Epsilon)
+                if (!object.ReferenceEquals(null, tex) && uv.width > UIRUtility.k_Epsilon && uv.height > UIRUtility.k_Epsilon)
                 {
                     var uvScale = new Vector2(1.0f / prevRect.width, 1.0f / prevRect.height);
                     uv.x += (inset.x * uvScale.x);

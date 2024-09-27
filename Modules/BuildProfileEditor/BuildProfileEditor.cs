@@ -24,10 +24,13 @@ namespace UnityEditor.Build.Profile
         const string k_SharedSettingsInfoHelpboxButton = "shared-settings-info-helpbox-button";
         const string k_SceneListFoldout = "scene-list-foldout";
         const string k_SceneListFoldoutRoot = "scene-list-foldout-root";
+        const string k_SceneListFoldoutAddOpenSection = "scene-list-foldout-add-open-section";
+        const string k_SceneListFoldoutAddOpenButton = "scene-list-foldout-add-open-button";
         const string k_SceneListFoldoutClassicSection = "scene-list-foldout-classic-section";
         const string k_SceneListFoldoutClassicButton = "scene-list-foldout-classic-button";
         const string k_CompilingWarningHelpBox = "compiling-warning-help-box";
         const string k_VirtualTextureWarningHelpBox = "virtual-texture-warning-help-box";
+        const string k_PlatformBuildWarningsRoot = "platform-build-warning-root";
         const string k_PlayerScriptingDefinesFoldout = "scripting-defines-foldout";
         const string k_BuildSettingsFoldout = "build-settings-foldout";
         BuildProfileSceneList m_SceneList;
@@ -97,6 +100,7 @@ namespace UnityEditor.Build.Profile
             var noModuleFoundHelpBox = root.Q<HelpBox>(k_PlatformWarningHelpBox);
             var platformSettingsLabel = root.Q<Label>(k_BuildSettingsLabel);
             var platformSettingsBaseRoot = root.Q<VisualElement>(k_PlatformSettingsBaseRoot);
+            var platformBuildWarningsRoot = root.Q<VisualElement>(k_PlatformBuildWarningsRoot);
             var buildDataLabel = root.Q<Label>(k_BuildDataLabel);
             var sharedSettingsInfoHelpBox = root.Q<HelpBox>(k_SharedSettingsInfoHelpbox);
             var buildSettingsFoldout = root.Q<Foldout>(k_BuildSettingsFoldout);
@@ -138,7 +142,7 @@ namespace UnityEditor.Build.Profile
 
             EditorApplication.update += EditorUpdate;
 
-            ShowPlatformSettings(profile, platformSettingsBaseRoot);
+            ShowPlatformSettings(profile, platformSettingsBaseRoot, platformBuildWarningsRoot);
             root.Bind(serializedObject);
             return root;
         }
@@ -245,16 +249,25 @@ namespace UnityEditor.Build.Profile
             }
         }
 
-        void ShowPlatformSettings(BuildProfile profile, VisualElement platformSettingsBaseRoot)
+        void ShowPlatformSettings(BuildProfile profile, VisualElement platformSettingsBaseRoot, VisualElement platformBuildWarningsRoot)
         {
             var platformProperties = serializedObject.FindProperty(k_PlatformSettingPropertyName);
             m_PlatformExtension = BuildProfileModuleUtil.GetBuildProfileExtension(profile.moduleName);
-            if (m_PlatformExtension != null)
+            if (m_PlatformExtension == null)
+                return;
+
+            var warningContainer = m_PlatformExtension.CreatePlatformBuildWarningsGUI(serializedObject, platformProperties);
+
+            // Build Profile Window reserves space for custom
+            // platform GUI outside of the editor scroll view.
+            if (parent != null && warningContainer != null)
             {
-                var settings = m_PlatformExtension.CreateSettingsGUI(
-                    serializedObject, platformProperties, platformSettingsState);
-                platformSettingsBaseRoot.Add(settings);
+                parent.AppendInspectorHeaderElement(warningContainer);
             }
+
+            var settings = m_PlatformExtension.CreateSettingsGUI(
+                serializedObject, platformProperties, platformSettingsState);
+            platformSettingsBaseRoot.Add(settings);
         }
 
         void AddSceneList(VisualElement root, BuildProfile profile = null)
@@ -271,9 +284,18 @@ namespace UnityEditor.Build.Profile
                 ? new BuildProfileSceneList()
                 : new BuildProfileSceneList(profile);
             Undo.undoRedoEvent += m_SceneList.OnUndoRedo;
-            var container = m_SceneList.GetSceneListGUI(isEnable);
+            var container = m_SceneList.GetSceneListGUI();
             container.SetEnabled(isEnable);
             root.Q<VisualElement>(k_SceneListFoldoutRoot).Add(container);
+
+            if (isEnable)
+            {
+                // Bind Add Open Scenes List button
+                root.Q<VisualElement>(k_SceneListFoldoutAddOpenSection).Show();
+                var addOpenSceneListButton = root.Q<Button>(k_SceneListFoldoutAddOpenButton);
+                addOpenSceneListButton.text = TrText.addOpenScenes;
+                addOpenSceneListButton.clicked += () => m_SceneList.AddOpenScenes();
+            }
 
             if (isClassicPlatform)
             {
@@ -281,10 +303,7 @@ namespace UnityEditor.Build.Profile
                 root.Q<VisualElement>(k_SceneListFoldoutClassicSection).Show();
                 var globalSceneListButton = root.Q<Button>(k_SceneListFoldoutClassicButton);
                 globalSceneListButton.text = TrText.openSceneList;
-                globalSceneListButton.clicked += () =>
-                {
-                    parent.OnClassicSceneListSelected();
-                };
+                globalSceneListButton.clicked += () => parent.OnClassicSceneListSelected();
             }
         }
 
@@ -345,7 +364,7 @@ namespace UnityEditor.Build.Profile
             if (m_Profile == null)
                 return;
 
-            if (m_Profile != BuildProfileContext.instance.activeProfile)
+            if (m_Profile != BuildProfileContext.activeProfile)
                 return;
 
             // Avoid dialog when waiting for compilation.

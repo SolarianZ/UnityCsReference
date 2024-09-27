@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using Unity.Jobs.LowLevel.Unsafe;
 using UnityEngine.TextCore.Text;
 
 namespace UnityEngine.UIElements
@@ -85,7 +86,11 @@ namespace UnityEngine.UIElements
 
         public override void AddTextInfoToPermanentCache()
         {
-            ConvertUssToTextGenerationSettings();
+            if (useAdvancedText)
+                ConvertUssToNativeTextGenerationSettings();
+            else
+                ConvertUssToTextGenerationSettings();
+
             base.AddTextInfoToPermanentCache();
         }
 
@@ -112,6 +117,8 @@ namespace UnityEngine.UIElements
         {
             var style = m_TextElement.computedStyle;
             var tgs = settings;
+            tgs.text = string.Empty;
+            tgs.isIMGUI = false;
             tgs.textSettings = TextUtilities.GetTextSettingsFrom(m_TextElement);
             if (tgs.textSettings == null)
                 return true;
@@ -172,7 +179,6 @@ namespace UnityEngine.UIElements
             tgs.inverseYAxis = true;
             tgs.fontFeatures = m_ActiveFontFeatures;
             tgs.emojiFallbackSupport = m_TextElement.emojiFallbackSupport;
-            tgs.isIMGUI = false;
 
             // The screenRect in TextCore is not properly implemented with regards to the offset part, so zero it out for now and we will add it ourselves later
             var size = m_TextElement.contentRect.size;
@@ -231,5 +237,32 @@ namespace UnityEngine.UIElements
             return Mathf.Min(padding * factor * gradientScale, gradientScale);
         }
 
+        private bool wasAdvancedTextEnabledForElement;
+        internal override bool IsAdvancedTextEnabledForElement()
+        {
+            // When it's called on a thread it automatically means it's not ATG, so we just return false.
+            if (JobsUtility.IsExecutingJob)
+                return false;
+
+            bool isEnabled = TextUtilities.IsAdvancedTextEnabledForElement(m_TextElement);
+            // We need to cleanup caches to avoid exceptions when switching between advanced and non-advanced text
+            if (wasAdvancedTextEnabledForElement && !isEnabled && textGenerationInfo != IntPtr.Zero)
+            {
+                TextGenerationInfo.Destroy(textGenerationInfo);
+                textGenerationInfo = IntPtr.Zero;
+            }
+            else if (!wasAdvancedTextEnabledForElement && isEnabled)
+            {
+                s_PermanentCache.RemoveTextInfoFromCache(this);
+                s_TemporaryCache.RemoveTextInfoFromCache(this);
+            }
+            wasAdvancedTextEnabledForElement = isEnabled;
+            return isEnabled;
+        }
+
+        public override bool IsPlaceholder
+        {
+            get => useAdvancedText ? m_TextElement.showPlaceholderText : base.IsPlaceholder;
+        }
     }
 }

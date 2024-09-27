@@ -34,6 +34,7 @@ namespace UnityEditor.Build.Profile
         public static readonly string activate = L10n.Tr("Switch Profile");
         public static readonly string activatePlatform = L10n.Tr("Switch Platform");
         public static readonly string sceneList = L10n.Tr("Scene List");
+        public static readonly string addOpenScenes = L10n.Tr("Add Open Scenes");
         public static readonly string openSceneList = L10n.Tr("Open Scene List");
         public static readonly string compilingMessage = L10n.Tr("Cannot build player while editor is importing assets or compiling scripts.");
         public static readonly string invalidVirtualTexturingSettingMessage = L10n.Tr("Cannot build player because Virtual Texturing is enabled, but the target platform or graphics API does not support Virtual Texturing. Go to Player Settings to resolve the incompatibility.");
@@ -59,7 +60,7 @@ namespace UnityEditor.Build.Profile
         public static readonly string resetPlayerSettingsDialogTitle = L10n.Tr("Reset Player Settings to Globals");
         public static readonly string resetPlayerSettingsDialogMessage = L10n.Tr("This will reset all Player Settings overrides and restore all global Player Settings.");
         public static readonly GUIContent playerSettingsReset = EditorGUIUtility.TrTextContent("Reset to Globals");
-        public static readonly GUIContent playerSetttingsRemove = EditorGUIUtility.TrTextContent("Remove Overrides");
+        public static readonly GUIContent playerSettingsRemove = EditorGUIUtility.TrTextContent("Remove Overrides");
 
         // Platform Discovery Window
         public static readonly string platformDiscoveryTitle = L10n.Tr("Platform Browser");

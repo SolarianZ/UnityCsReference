@@ -862,6 +862,17 @@ namespace UnityEditor
             if (maximized)
                 Unmaximize(maximized);
 
+            // When the playmode behaviour is set to Play Unfocused
+            if (entering)
+            { 
+                var playmodeView = PlayModeView.GetCorrectPlayModeViewToFocus();
+                if (playmodeView != null && playmodeView.enterPlayModeBehavior == PlayModeView.EnterPlayModeBehavior.PlayUnfocused)
+                {
+                    playmodeView.m_Parent.OnLostFocus();
+                    return playmodeView;
+                }
+            }
+
             // Try finding and focusing appropriate window/tab
             window = TryFocusAppropriateWindow(entering);
             if (window)
@@ -1638,6 +1649,9 @@ namespace UnityEditor
                     EditorApplication.Exit(0);
                 return;
             }
+
+            if (!ContainerWindow.CanCloseAll(false))
+                return;
 
             ResetFactorySettings();
         }

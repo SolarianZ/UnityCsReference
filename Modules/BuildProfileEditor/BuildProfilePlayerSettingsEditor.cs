@@ -140,7 +140,12 @@ namespace UnityEditor.Build.Profile
             {
                 var isActiveProfile = BuildProfile.GetActiveBuildProfile() == m_Profile;
                 m_PlayerSettingsEditor = Editor.CreateEditor(m_Profile.playerSettings) as PlayerSettingsEditor;
-                m_PlayerSettingsEditor.ConfigurePlayerSettingsForBuildProfile(m_ProfileSerializedObject, m_Profile.moduleName, m_Profile.subtarget == StandaloneBuildSubtarget.Server, isActiveProfile);
+                m_PlayerSettingsEditor.ConfigurePlayerSettingsForBuildProfile(
+                    m_ProfileSerializedObject,
+                    m_Profile.moduleName,
+                    m_Profile.subtarget == StandaloneBuildSubtarget.Server,
+                    isActiveProfile,
+                    OnPlayerSettingsEditorChanged);
             }
 
             if (m_PlayerSettingsInspector == null)
@@ -192,7 +197,7 @@ namespace UnityEditor.Build.Profile
             bool isDataSameAsProjSettings = BuildProfileModuleUtil.IsDataEqualToProjectSettings(m_Profile.playerSettings);
             isDataSameAsProjSettings = isDataSameAsProjSettings && m_PlayerSettingsEditor.IsPlayerSettingsExtensionDataEqualToProjectSettings();
             var menu = new GenericMenu();
-            menu.AddItem(TrText.playerSetttingsRemove, false, RemovePlayerSettings);
+            menu.AddItem(TrText.playerSettingsRemove, false, RemovePlayerSettings);
             menu.AddItem(TrText.playerSettingsReset, false, isDataSameAsProjSettings ? null : ResetToProjectSettingsValues);
             menu.ShowAsContext();
         }
@@ -210,10 +215,29 @@ namespace UnityEditor.Build.Profile
             var customScriptingDefines = PlayerSettings.GetScriptingDefineSymbols(targetName);
             var customAdditionalCompilerArguments = PlayerSettings.GetAdditionalCompilerArguments(targetName);
 
+            // we only want to show the restart editor prompt when making changes to an active profile
+            // otherwise we continue normally with removing the player settings
+            if (m_Profile == BuildProfileContext.activeProfile)
+            {
+                BuildTarget currentBuildTarget = m_Profile.buildTarget;
+                BuildTarget nextBuildTarget = m_Profile.buildTarget;
+                // success is we either found no settings to restart or we did and the user agreed to restart the editor
+                // failure here is if we found settings requiring restart but the user declined to cancel
+                // so we don't continue with the action
+                var isSuccess =
+                    BuildProfileModuleUtil.HandlePlayerSettingsChanged(m_Profile, null, currentBuildTarget,
+                        nextBuildTarget);
+                if (!isSuccess)
+                {
+                    return;
+                }
+            }
+
             HidePlayerSettingsEditor();
             BuildProfileModuleUtil.RemovePlayerSettings(m_Profile);
             UpdateBuildProfile();
             CheckPropertiesThatRequireRecompilation(targetName, customScriptingDefines, customAdditionalCompilerArguments);
+
         }
 
         void ResetToProjectSettingsValues()
@@ -225,6 +249,26 @@ namespace UnityEditor.Build.Profile
 
             if (!resetPlayerSettings)
                 return;
+
+            // we only want to show the restart editor prompt when making changes to an active profile
+            // otherwise we continue normally with resetting the values to project settings
+            if (m_Profile == BuildProfileContext.activeProfile)
+            {
+                BuildTarget currentBuildTarget = m_Profile.buildTarget;
+                BuildTarget nextBuildTarget = m_Profile.buildTarget;
+
+                // we should check if the player setting overrides we're updating differ from the project settings
+                // in that case wes should check for any setting that requires an editor restart to take effect
+                // if it does, we should a restart prompt. if the user cancels, we cancel the resetting action
+
+                var isSuccess =
+                    BuildProfileModuleUtil.HandlePlayerSettingsChanged(m_Profile, null, currentBuildTarget,
+                        nextBuildTarget);
+                if (!isSuccess)
+                {
+                    return;
+                }
+            }
 
             var targetName = NamedBuildTarget.FromBuildTargetGroup(BuildPipeline.GetBuildTargetGroup(m_Profile.buildTarget));
             var customScriptingDefines = PlayerSettings.GetScriptingDefineSymbols(targetName);

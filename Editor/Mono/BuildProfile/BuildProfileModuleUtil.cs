@@ -321,6 +321,11 @@ namespace UnityEditor.Build.Profile
             return result;
         }
 
+        public static bool IsPlatformAvailableOnHostPlatform(GUID platformGuid, OperatingSystemFamily operatingSystemFamily)
+        {
+            return BuildTargetDiscovery.BuildPlatformIsAvailableOnHostPlatform(platformGuid, SystemInfo.operatingSystemFamily);
+        }
+
         /// <summary>
         /// Check if the user is able to build his VT-enabled Player for a target platform
         /// </summary>
@@ -537,6 +542,88 @@ namespace UnityEditor.Build.Profile
         public static (BuildTarget, StandaloneBuildSubtarget) GetBuildTargetAndSubtarget(string platformId)
         {
             return BuildTargetDiscovery.GetBuildTargetAndSubtargetFromGUID(new GUID(platformId));
+        }
+
+        public static string[] GetSettingsRequiringRestart(PlayerSettings previousProfileSettings, PlayerSettings newProfileSettings, BuildTarget oldBuildTarget, BuildTarget newBuildTarget)
+        {
+            return  PlayerSettings.GetSettingsRequiringRestart(previousProfileSettings, newProfileSettings, oldBuildTarget, newBuildTarget);
+        }
+
+        public static PlayerSettings GetGlobalPlayerSettings()
+        {
+            return BuildProfile.GetGlobalPlayerSettings();
+        }
+
+        /// <summary>
+        /// Handles change in global player settings object from the build profile workflow.
+        /// Checks that the player settings in <see cref="nextBuildProfile"/> can be applied
+        /// and/or requests action from the end user.
+        /// </summary>
+        /// <returns>
+        ///     true, if player settings for the next profile have been handled.
+        /// </returns>
+        public static bool HandlePlayerSettingsChanged(
+            BuildProfile currentBuildProfile, BuildProfile nextBuildProfile,
+            BuildTarget currentBuildTarget, BuildTarget nextBuildTarget)
+        {
+            PlayerSettings projectSettingsPlayerSettings = GetGlobalPlayerSettings();
+            PlayerSettings currentPlayerSettings = projectSettingsPlayerSettings;
+            PlayerSettings nextPlayerSettings = projectSettingsPlayerSettings;
+
+            if (currentBuildProfile != null)
+            {
+                if (currentBuildProfile.playerSettings != null)
+                {
+                    currentPlayerSettings = currentBuildProfile.playerSettings;
+                }
+            }
+
+            if (nextBuildProfile != null)
+            {
+                if (nextBuildProfile.playerSettings != null)
+                {
+                    nextPlayerSettings = nextBuildProfile.playerSettings;
+                }
+            }
+
+            string[] settingsRequiringRestart = GetSettingsRequiringRestart(currentPlayerSettings,
+                nextPlayerSettings, currentBuildTarget, nextBuildTarget);
+            // if we've found settings that need restarting..
+            if (settingsRequiringRestart.Length > 0 )
+            {
+                // ..we show the restart prompt, if the user restarts, we add a restart call to the editor
+                if (ShowRestartEditorDialog(settingsRequiringRestart))
+                {
+                    EditorApplication.delayCall += EditorApplication.RestartEditorAndRecompileScripts;
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            // Handle editor changed requiring background work without an editor prompt.
+            PlayerSettingsEditor.HandlePlayerSettingsChanged(
+                currentPlayerSettings, nextPlayerSettings,
+                currentBuildTarget, nextBuildTarget);
+            return true;
+        }
+
+        /// <summary>
+        /// Show the restart editor dialog with the names of the settings that required the restart to take effect.
+        /// </summary>
+        static bool ShowRestartEditorDialog(string[] settingsRequiringRestart)
+        {
+            var editorPromptText = new System.Text.StringBuilder();
+            editorPromptText.AppendLine(L10n.Tr("The Unity editor must be restarted for the following settings to take effect:"));
+            for (int i = 0; i < settingsRequiringRestart.Length; i++)
+            {
+                editorPromptText.AppendLine(settingsRequiringRestart[i]);
+            }
+
+            return EditorUtility.DisplayDialog(L10n.Tr("Unity editor restart required"),
+                editorPromptText.ToString(), L10n.Tr("Apply"), L10n.Tr("Cancel"));
         }
     }
 }
